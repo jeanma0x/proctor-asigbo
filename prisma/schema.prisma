@@ -1,0 +1,165 @@
+// ASIGBO Proctoring - Prisma schema (PostgreSQL / Neon.tech)
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider  = "postgresql"
+  // Pooled connection (Neon pgbouncer) for runtime queries
+  url       = env("DATABASE_URL")
+  // Direct connection for migrations
+  directUrl = env("DIRECT_URL")
+}
+
+// ───────────── Enums ─────────────
+
+enum ExamStatus {
+  DRAFT
+  PUBLISHED
+  CLOSED
+}
+
+enum QuestionType {
+  MULTIPLE_CHOICE
+  TEXT
+}
+
+enum SessionStatus {
+  NOT_STARTED
+  IN_PROGRESS
+  SUBMITTED
+  TERMINATED // cerrada por la Junta / fraude
+}
+
+enum AuditEventType {
+  SESSION_START
+  SESSION_SUBMIT
+  TAB_CHANGE
+  WINDOW_BLUR
+  FULLSCREEN_EXIT
+  PASTE_ATTEMPT
+  COPY_ATTEMPT
+  CUT_ATTEMPT
+  CONTEXT_MENU
+  OTHER
+}
+
+enum AuditSeverity {
+  INFO
+  WARNING
+  CRITICAL
+}
+
+// ───────────── Models ─────────────
+
+model Candidate {
+  id        String   @id @default(cuid())
+  fullName  String
+  email     String   @unique
+  /// Carné o identificador del aspirante
+  studentId String?  @unique
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  sessions CandidateSession[]
+}
+
+model Exam {
+  id              String     @id @default(cuid())
+  title           String
+  description     String?
+  /// Duración en minutos
+  durationMinutes Int        @default(60)
+  status          ExamStatus @default(DRAFT)
+  opensAt         DateTime?
+  closesAt        DateTime?
+  createdAt       DateTime   @default(now())
+  updatedAt       DateTime   @updatedAt
+
+  questions Question[]
+  sessions  CandidateSession[]
+}
+
+model Question {
+  id       String       @id @default(cuid())
+  examId   String
+  text     String
+  type     QuestionType @default(MULTIPLE_CHOICE)
+  imageUrl String?
+  /// Orden de aparición en el examen
+  position Int          @default(0)
+  points   Int          @default(1)
+
+  exam    Exam     @relation(fields: [examId], references: [id], onDelete: Cascade)
+  options Option[]
+  answers Answer[]
+
+  @@index([examId, position])
+}
+
+model Option {
+  id         String  @id @default(cuid())
+  questionId String
+  text       String
+  imageUrl   String?
+  isCorrect  Boolean @default(false)
+  position   Int     @default(0)
+
+  question Question @relation(fields: [questionId], references: [id], onDelete: Cascade)
+  answers  Answer[]
+
+  @@index([questionId])
+}
+
+model CandidateSession {
+  id          String        @id @default(cuid())
+  candidateId String
+  examId      String
+  status      SessionStatus @default(NOT_STARTED)
+  startedAt   DateTime?
+  submittedAt DateTime?
+  score       Float?
+  /// Contador denormalizado de incidencias para el dashboard en vivo
+  flagCount   Int           @default(0)
+  createdAt   DateTime      @default(now())
+  updatedAt   DateTime      @updatedAt
+
+  candidate Candidate  @relation(fields: [candidateId], references: [id], onDelete: Cascade)
+  exam      Exam       @relation(fields: [examId], references: [id], onDelete: Cascade)
+  answers   Answer[]
+  auditLogs AuditLog[]
+
+  @@unique([candidateId, examId])
+  @@index([status])
+}
+
+/// Respuesta del candidato (necesaria para calificar)
+model Answer {
+  id               String   @id @default(cuid())
+  sessionId        String
+  questionId       String
+  selectedOptionId String?
+  textResponse     String?
+  answeredAt       DateTime @default(now())
+
+  session        CandidateSession @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+  question       Question         @relation(fields: [questionId], references: [id], onDelete: Cascade)
+  selectedOption Option?          @relation(fields: [selectedOptionId], references: [id], onDelete: SetNull)
+
+  @@unique([sessionId, questionId])
+}
+
+model AuditLog {
+  id        String         @id @default(cuid())
+  sessionId String
+  type      AuditEventType
+  severity  AuditSeverity  @default(WARNING)
+  details   String?
+  createdAt DateTime       @default(now())
+
+  session CandidateSession @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+
+  @@index([sessionId, createdAt])
+  @@index([type, createdAt])
+}
