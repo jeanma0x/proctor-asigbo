@@ -3,7 +3,8 @@
 import Image from "next/image";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { ClipboardList, KeyRound, MonitorPlay, type LucideIcon } from "lucide-react";
+import { signOut } from "next-auth/react";
+import { ClipboardList, KeyRound, LogOut, MonitorPlay, type LucideIcon } from "lucide-react";
 
 const NAV: { href: string; label: string; icon: LucideIcon }[] = [
   { href: "/admin/exam-builder", label: "Constructor de Exámenes", icon: ClipboardList },
@@ -57,9 +58,19 @@ export default function AdminSidebar() {
         })}
       </nav>
 
-      <p className="hidden border-t border-white/10 px-5 py-4 text-xs text-blue-200/70 md:block">
-        Evaluación de becas · Junta Directiva
-      </p>
+      <div className="border-t border-white/10 p-3">
+        <button
+          type="button"
+          onClick={() => signOut({ callbackUrl: "/admin/login" })}
+          className="flex w-full cursor-pointer items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium text-blue-100 transition-colors hover:bg-white/10 hover:text-white focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-white"
+        >
+          <LogOut className="h-4 w-4 shrink-0" aria-hidden="true" />
+          Cerrar Sesión
+        </button>
+        <p className="mt-2 hidden px-3 text-xs text-blue-200/70 md:block">
+          Evaluación de becas · Junta Directiva
+        </p>
+      </div>
     </aside>
   );
 }

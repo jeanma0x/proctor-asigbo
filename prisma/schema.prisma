@@ -163,3 +163,11 @@ model AuditLog {
   @@index([sessionId, createdAt])
   @@index([type, createdAt])
 }
+
+/// Administradores de la Junta Directiva (acceso al panel /admin)
+model AdminUser {
+  id           String   @id @default(cuid())
+  email        String   @unique
+  passwordHash String
+  createdAt    DateTime @default(now())
+}

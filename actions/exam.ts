@@ -3,6 +3,7 @@
 import { randomUUID } from "crypto";
 import { revalidatePath } from "next/cache";
 import { prisma } from "@/lib/prisma";
+import { isAdmin, UNAUTHORIZED } from "@/lib/require-admin";
 
 export type QuestionTypeInput = "MULTIPLE_CHOICE" | "TEXT";
 
@@ -89,6 +90,7 @@ function cleanUrl(url?: string): string | null {
 
 /** Creación manual desde el formulario dinámico. */
 export async function createExamManual(input: CreateExamInput): Promise<ActionResult> {
+  if (!(await isAdmin())) return { ok: false, error: UNAUTHORIZED };
   try {
     const metaError = validMeta(input.title, input.durationMinutes);
     if (metaError) return { ok: false, error: metaError };
@@ -143,6 +145,7 @@ export async function importExamFromCsv(
   meta: { title: string; description?: string; durationMinutes: number },
   rows: CsvRow[],
 ): Promise<ActionResult> {
+  if (!(await isAdmin())) return { ok: false, error: UNAUTHORIZED };
   try {
     const metaError = validMeta(meta.title, meta.durationMinutes);
     if (metaError) return { ok: false, error: metaError };
@@ -202,6 +205,7 @@ export async function importExamFromCsv(
 export async function publishExam(
   examId: string,
 ): Promise<{ ok: true } | { ok: false; error: string }> {
+  if (!(await isAdmin())) return { ok: false, error: UNAUTHORIZED };
   try {
     const exam = await prisma.exam.findUnique({
       where: { id: examId },

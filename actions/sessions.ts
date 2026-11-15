@@ -2,6 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 import { prisma } from "@/lib/prisma";
+import { isAdmin, UNAUTHORIZED } from "@/lib/require-admin";
 import type { CandidateInput } from "@/lib/parse-candidates";
 
 export type GeneratedSession = {
@@ -26,6 +27,7 @@ const EMAIL_OK = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
  * Es idempotente: re-ejecutarla con el mismo correo devuelve la sesión existente.
  */
 export async function generateSessions(examId: string, candidates: CandidateInput[]): Promise<GenerateResult> {
+  if (!(await isAdmin())) return { ok: false, error: UNAUTHORIZED };
   try {
     const exam = await prisma.exam.findUnique({ where: { id: examId }, select: { status: true } });
     if (!exam) return { ok: false, error: "El examen no existe." };
