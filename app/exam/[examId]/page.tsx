@@ -83,7 +83,7 @@ async function ExamContent({
   });
 
   if (!session || session.examId !== examId) {
-    return <Notice title="Sesión no encontrada" text="El enlace no corresponde a ningún examen asignado." />;
+    return <Notice title="Este enlace ya no es válido" text="No encontramos un examen asignado a este enlace. Puede que se haya quitado o reemplazado por uno nuevo. Escribe a la Junta Directiva de ASIGBO para que te envíen tu enlace actualizado." />;
   }
   if (session.status === "SUBMITTED") {
     return <Notice title="Examen ya entregado" text="Esta sesión ya fue completada." />;
