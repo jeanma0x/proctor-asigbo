@@ -2,11 +2,14 @@ import { Suspense } from "react";
 import Link from "next/link";
 import type { Metadata } from "next";
 import { notFound } from "next/navigation";
-import { ArrowLeft, Check, CircleHelp, X } from "lucide-react";
+import { ArrowLeft, Check, CircleHelp, FileText, X } from "lucide-react";
 import Gate from "@/components/admin/Gate";
 import { PageContainer } from "@/components/admin/ui";
 import { card } from "@/components/admin/ui";
 import { getResultDetail } from "@/actions/results";
+import { getAdmin } from "@/lib/require-admin";
+import { can } from "@/lib/permissions";
+import { btnPrimary } from "@/components/admin/ui";
 import { fmtDateTime } from "@/lib/format";
 import { EVENT_LABEL, STATUS_LABEL } from "@/lib/labels";
 
@@ -14,8 +17,9 @@ export const metadata: Metadata = { title: "Detalle de resultado · ASIGBO Proct
 
 async function Detail({ params }: { params: Promise<{ sessionId: string }> }) {
   const { sessionId } = await params;
-  const d = await getResultDetail(sessionId);
+  const [d, admin] = await Promise.all([getResultDetail(sessionId), getAdmin()]);
   if (!d) notFound();
+  const canExport = can(admin?.role, "results:export");
   const pct = d.score != null && d.maxScore ? Math.round((d.score / d.maxScore) * 100) : null;
   const mins = d.startedAt && d.submittedAt ? Math.max(1, Math.round((d.submittedAt.getTime() - d.startedAt.getTime()) / 60000)) : null;
   const st = STATUS_LABEL[d.status];
@@ -33,7 +37,10 @@ async function Detail({ params }: { params: Promise<{ sessionId: string }> }) {
             <h1 className="mt-1 text-2xl font-bold tracking-tight">{d.candidate.fullName}</h1>
             <p className="text-sm text-slate-600">{d.candidate.email}</p>
           </div>
-          <span className={`rounded-full px-3 py-1 text-sm font-semibold ${st.cls}`}>{st.label}</span>
+          <div className="flex flex-col items-end gap-3">
+            <span className={`rounded-full px-3 py-1 text-sm font-semibold ${st.cls}`}>{st.label}</span>
+            {canExport && <a href={`/admin/reports/candidate/${d.id}/pdf`} className={btnPrimary}><FileText className="h-4 w-4" aria-hidden="true" /> Informe PDF</a>}
+          </div>
         </div>
         <dl className="mt-5 grid gap-3 sm:grid-cols-4">
           {[

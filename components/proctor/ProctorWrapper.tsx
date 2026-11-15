@@ -13,7 +13,7 @@ import {
   type MouseEvent,
   type ReactNode,
 } from "react";
-import { AlertTriangle, Ban, Expand, Lock, MonitorX, ShieldAlert, ShieldCheck } from "lucide-react";
+import { Ban, Clock, Expand, FileQuestion, MonitorX, TriangleAlert } from "lucide-react";
 import { logInfraction, startSession } from "@/actions/proctor";
 import { MAX_STRIKES } from "@/lib/proctor-constants";
 
@@ -48,17 +48,40 @@ const WARNING_TEXT: Record<Warning["type"], string> = {
 const STRIKE_DEBOUNCE_MS = 1500;
 const SOFT_EVENT_DEBOUNCE_MS = 2000;
 
+/** Marco común de las pantallas del candidato: papel cálido, franja con los colores del logo y logo arriba. */
+function Shell({ children }: { children: ReactNode }) {
+  return (
+    <div className="min-h-screen bg-paper text-slate-900">
+      <div className="flex h-1.5" aria-hidden="true">
+        <span className="flex-1 bg-asigbo-blue" /><span className="flex-1 bg-asigbo-cyan" /><span className="flex-1 bg-asigbo-green" /><span className="flex-1 bg-asigbo-orange" />
+      </div>
+      <header className="border-b border-slate-200 bg-white">
+        <div className="mx-auto flex max-w-5xl items-center px-6 py-3">
+          <Image alt="ASIGBO" src="/logo-asigbo.png" width={150} height={46} priority className="h-10 w-auto" />
+        </div>
+      </header>
+      {children}
+    </div>
+  );
+}
+
 export default function ProctorWrapper({
   sessionId,
   candidateName,
   examTitle,
   initialFlagCount,
+  durationMinutes,
+  questionCount,
+  totalPoints,
   children,
 }: {
   sessionId: string;
   candidateName: string;
   examTitle: string;
   initialFlagCount: number;
+  durationMinutes: number;
+  questionCount: number;
+  totalPoints: number;
   children: ReactNode;
 }) {
   const [phase, setPhase] = useState<Phase>("welcome");
@@ -67,6 +90,7 @@ export default function ProctorWrapper({
   const [warning, setWarning] = useState<Warning | null>(null);
   const [startError, setStartError] = useState<string | null>(null);
   const [starting, setStarting] = useState(false);
+  const [acknowledged, setAcknowledged] = useState(false);
   const [timing, setTiming] = useState({ deadlineMs: 0, clockOffsetMs: 0 });
 
   const phaseRef = useRef<Phase>("welcome");
@@ -231,61 +255,86 @@ export default function ProctorWrapper({
 
   // ───────────── Pantallas ─────────────
 
+  const firstName = candidateName.trim().split(/\s+/)[0] ?? candidateName;
+
   if (phase === "terminated") {
     return (
-      <div className="flex min-h-screen items-center justify-center bg-slate-950 p-6 text-white">
-        <div className="max-w-md rounded-xl border border-red-900 bg-slate-900 p-8 text-center shadow-2xl">
-          <Ban className="mx-auto mb-4 h-14 w-14 text-red-600" aria-hidden="true" />
-          <h1 className="text-2xl font-bold">Examen terminado</h1>
-          <p className="mt-3 text-slate-300">
-            Tu sesión fue cerrada por alcanzar {MAX_STRIKES} infracciones de las reglas de integridad. La Junta
-            Directiva revisará el registro de incidencias.
+      <Shell>
+        <div className="mx-auto max-w-lg px-6 py-20 text-center">
+          <Ban className="mx-auto mb-5 h-12 w-12 text-amber-600" aria-hidden="true" />
+          <h1 className="font-serif text-3xl font-semibold text-slate-900">Tu examen se cerró</h1>
+          <p className="mt-4 text-lg leading-relaxed text-slate-700">
+            Se registraron {MAX_STRIKES} advertencias de seguridad y, por las reglas del examen, la sesión terminó automáticamente.
+          </p>
+          <p className="mt-3 text-base leading-relaxed text-slate-600">
+            La Junta Directiva revisará lo ocurrido y se pondrá en contacto contigo. Ya puedes cerrar esta ventana.
           </p>
         </div>
-      </div>
+      </Shell>
     );
   }
 
   if (phase === "welcome") {
+    const rules = [
+      "Usa una computadora con buena conexión y, de preferencia, conectada a la corriente.",
+      "Cierra otras pestañas, programas y notificaciones antes de empezar.",
+      "El examen ocupa toda la pantalla. Si sales de ella, cambias de pestaña o de ventana, se registra una advertencia.",
+      "Copiar, pegar y el clic derecho están desactivados durante el examen.",
+      `A la tercera advertencia (${MAX_STRIKES}), el examen se cierra automáticamente.`,
+      "Tus respuestas se guardan solas. Si se recarga la página no pierdes nada, pero el tiempo sigue corriendo.",
+    ];
     return (
-      <div className="flex min-h-screen items-center justify-center bg-gradient-to-br from-slate-950 via-blue-950 to-slate-900 p-6 text-white">
-        <div className="w-full max-w-xl rounded-xl border border-slate-700 bg-slate-900 p-8 shadow-2xl">
-          <ShieldCheck className="mb-4 h-12 w-12 text-blue-400" />
-          <p className="text-xs font-semibold uppercase tracking-widest text-blue-300">ASIGBO Proctoring</p>
-          <h1 className="mt-1 text-2xl font-bold">{examTitle}</h1>
-          <p className="mt-1 text-slate-300">Candidato: {candidateName}</p>
-
-          <ul className="mt-6 space-y-2 text-sm text-slate-300">
-            <li className="flex gap-2"><Lock className="mt-0.5 h-4 w-4 shrink-0 text-blue-400" /> El examen se rinde en pantalla completa obligatoria.</li>
-            <li className="flex gap-2"><Lock className="mt-0.5 h-4 w-4 shrink-0 text-blue-400" /> Cambiar de pestaña, perder el foco o salir de pantalla completa es una infracción.</li>
-            <li className="flex gap-2"><Lock className="mt-0.5 h-4 w-4 shrink-0 text-blue-400" /> Copiar, pegar, cortar y el menú contextual están deshabilitados.</li>
-            <li className="flex gap-2"><AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-amber-400" /> Al llegar a {MAX_STRIKES} infracciones tu examen se termina automáticamente.</li>
-          </ul>
-
-          {strikes > 0 && (
-            <p className="mt-4 rounded-lg bg-amber-500/10 p-3 text-sm text-amber-300">
-              Ya tienes {strikes}/{MAX_STRIKES} infracciones registradas en esta sesión.
+      <Shell>
+        <div className="mx-auto grid max-w-5xl gap-10 px-6 py-10 lg:grid-cols-[1.1fr_1fr] lg:py-16">
+          <div>
+            <p className="text-sm font-semibold uppercase tracking-widest text-asigbo-blue">Beca ASIGBO</p>
+            <h1 className="mt-3 font-serif text-4xl font-semibold leading-tight text-slate-900 sm:text-5xl">Hola, {firstName}.</h1>
+            <p className="mt-4 text-xl leading-relaxed text-slate-700">
+              Este es tu examen: <strong className="font-semibold text-slate-900">{examTitle}</strong>. Tómate un momento para leer cómo funciona antes de comenzar.
             </p>
-          )}
-          {startError && <p role="alert" className="mt-4 rounded-lg bg-red-500/10 p-3 text-sm text-red-300">{startError}</p>}
-
-          <div className="mt-8 flex justify-center">
-            <div className="rounded-xl bg-white px-5 py-3 shadow-md">
-              <Image alt="ASIGBO Logo" src="/logo-asigbo.png" width={180} height={55} priority className="h-auto w-[180px]" />
-            </div>
+            <dl className="mt-8 grid max-w-md grid-cols-3 divide-x divide-slate-300 border-y border-slate-300 py-4 text-center">
+              <div className="px-2"><dt className="flex items-center justify-center gap-1.5 text-sm text-slate-600"><Clock className="h-4 w-4" aria-hidden="true" /> Tiempo</dt><dd className="mt-1 font-serif text-2xl font-semibold">{durationMinutes} min</dd></div>
+              <div className="px-2"><dt className="flex items-center justify-center gap-1.5 text-sm text-slate-600"><FileQuestion className="h-4 w-4" aria-hidden="true" /> Preguntas</dt><dd className="mt-1 font-serif text-2xl font-semibold">{questionCount}</dd></div>
+              <div className="px-2"><dt className="text-sm text-slate-600">Puntos</dt><dd className="mt-1 font-serif text-2xl font-semibold">{totalPoints}</dd></div>
+            </dl>
+            {strikes > 0 && (
+              <p className="mt-6 max-w-md rounded-lg border border-amber-300 bg-amber-50 p-3 text-base text-amber-950">
+                Ya tienes {strikes} de {MAX_STRIKES} advertencias en esta sesión.
+              </p>
+            )}
           </div>
 
-          <button
-            type="button"
-            onClick={handleStart}
-            disabled={starting}
-            className="mt-5 flex w-full items-center justify-center gap-2 rounded-xl bg-asigbo-blue px-6 py-3 font-semibold text-white shadow-lg ring-1 ring-blue-300/40 transition-colors hover:bg-asigbo-blue-dark disabled:opacity-60"
-          >
-            <Expand className="h-5 w-5" />
-            {starting ? "Iniciando…" : "Iniciar Examen en Pantalla Completa"}
-          </button>
+          <section className="rounded-2xl border border-slate-200 bg-white p-7 shadow-sm" aria-labelledby="rules-title">
+            <h2 id="rules-title" className="font-serif text-2xl font-semibold text-slate-900">Antes de empezar</h2>
+            <ol className="mt-5 space-y-3.5">
+              {rules.map((r, i) => (
+                <li key={r} className="flex gap-3 text-base leading-relaxed text-slate-800">
+                  <span className="mt-0.5 flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-asigbo-blue text-xs font-bold text-white" aria-hidden="true">{i + 1}</span>
+                  <span>{r}</span>
+                </li>
+              ))}
+            </ol>
+
+            <label className="mt-6 flex cursor-pointer items-start gap-3 rounded-xl border border-slate-300 p-4 text-base text-slate-900 has-[:checked]:border-asigbo-blue has-[:checked]:bg-asigbo-blue/5">
+              <input type="checkbox" checked={acknowledged} onChange={(e) => setAcknowledged(e.target.checked)} className="mt-1 h-5 w-5 shrink-0 accent-asigbo-blue" />
+              <span>Leí las reglas y estoy listo(a) para comenzar.</span>
+            </label>
+
+            {startError && <p role="alert" className="mt-4 rounded-lg border border-red-300 bg-red-50 p-3 text-base text-red-900">{startError}</p>}
+
+            <button
+              type="button"
+              onClick={handleStart}
+              disabled={starting || !acknowledged}
+              className="mt-5 flex min-h-12 w-full cursor-pointer items-center justify-center gap-2 rounded-xl bg-asigbo-blue px-6 py-3 text-base font-semibold text-white transition-colors hover:bg-asigbo-blue-dark focus-visible:outline-3 focus-visible:outline-offset-2 focus-visible:outline-asigbo-blue disabled:cursor-not-allowed disabled:opacity-50"
+            >
+              <Expand className="h-5 w-5" aria-hidden="true" />
+              {starting ? "Iniciando…" : "Comenzar el examen"}
+            </button>
+            <p className="mt-3 text-center text-sm text-slate-600">Al comenzar, el reloj empieza a correr. ¿Algún problema técnico? Avisa a la Junta Directiva antes de iniciar.</p>
+          </section>
         </div>
-      </div>
+      </Shell>
     );
   }
 
@@ -295,7 +344,7 @@ export default function ProctorWrapper({
   return (
     <ProctorContext.Provider value={ctx}>
       <div
-        className="min-h-screen select-none bg-white"
+        className="min-h-screen select-none bg-paper"
         onContextMenu={blockMouse}
         onCopy={blockClipboard("COPY_ATTEMPT")}
         onPaste={blockClipboard("PASTE_ATTEMPT")}
@@ -305,17 +354,13 @@ export default function ProctorWrapper({
       </div>
 
       {showFullscreenLock && (
-        <div role="alertdialog" aria-modal="true" className="fixed inset-0 z-50 flex items-center justify-center bg-black/90 p-6 text-white backdrop-blur-sm">
-          <div className="max-w-md rounded-xl border border-red-900 bg-slate-900 p-8 text-center shadow-2xl">
-            <MonitorX className="mx-auto mb-4 h-14 w-14 text-red-500" aria-hidden="true" />
-            <h2 className="text-2xl font-bold">Examen bloqueado</h2>
-            <p className="mt-2 text-slate-300">Debes volver a pantalla completa para continuar. El tiempo sigue corriendo.</p>
-            <p className="mt-3 text-sm font-semibold text-red-400">Infracciones: {strikes}/{MAX_STRIKES}</p>
-            <button
-              type="button"
-              onClick={enterFullscreen}
-              className="mt-6 rounded-xl bg-red-800 px-6 py-3 font-semibold text-white shadow-md transition-colors hover:bg-red-700"
-            >
+        <div role="alertdialog" aria-modal="true" aria-labelledby="fs-title" className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/70 p-6">
+          <div className="w-full max-w-md rounded-2xl border-t-4 border-amber-500 bg-white p-8 text-center shadow-xl">
+            <MonitorX className="mx-auto mb-3 h-10 w-10 text-amber-600" aria-hidden="true" />
+            <h2 id="fs-title" className="font-serif text-2xl font-semibold text-slate-900">Vuelve a pantalla completa</h2>
+            <p className="mt-3 text-base leading-relaxed text-slate-700">El examen necesita toda la pantalla para continuar. <strong>El tiempo sigue corriendo.</strong></p>
+            <p className="mt-3 text-sm font-medium text-slate-600">Advertencias: {strikes} de {MAX_STRIKES}</p>
+            <button type="button" onClick={enterFullscreen} className="mt-6 min-h-12 w-full cursor-pointer rounded-xl bg-asigbo-blue px-6 py-3 text-base font-semibold text-white transition-colors hover:bg-asigbo-blue-dark focus-visible:outline-3 focus-visible:outline-offset-2 focus-visible:outline-asigbo-blue">
               Volver a pantalla completa
             </button>
           </div>
@@ -323,22 +368,15 @@ export default function ProctorWrapper({
       )}
 
       {showWarning && warning && (
-        <div role="alertdialog" aria-modal="true" className="fixed inset-0 z-50 flex items-center justify-center bg-black/85 p-6 text-white backdrop-blur-sm">
-          <div className="max-w-md rounded-xl border border-red-900 bg-red-950 p-8 text-center shadow-2xl">
-            <ShieldAlert className="mx-auto mb-3 h-14 w-14 text-red-400" aria-hidden="true" />
-            <h2 className="text-2xl font-bold">
-              Advertencia de Fraude (Strike {warning.strike}/{MAX_STRIKES})
-            </h2>
-            <p className="mt-3 text-red-100">{WARNING_TEXT[warning.type]}</p>
-            <p className="mt-2 text-sm text-red-200/80">
-              Esta incidencia fue registrada y notificada a la Junta Directiva. Con {MAX_STRIKES} strikes tu examen se
-              termina.
+        <div role="alertdialog" aria-modal="true" aria-labelledby="warn-title" className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/70 p-6">
+          <div className="w-full max-w-md rounded-2xl border-t-4 border-amber-500 bg-white p-8 shadow-xl">
+            <TriangleAlert className="mb-3 h-10 w-10 text-amber-600" aria-hidden="true" />
+            <h2 id="warn-title" className="font-serif text-2xl font-semibold text-slate-900">Advertencia {warning.strike} de {MAX_STRIKES}</h2>
+            <p className="mt-3 text-base leading-relaxed text-slate-800">{WARNING_TEXT[warning.type]}</p>
+            <p className="mt-3 text-base leading-relaxed text-slate-600">
+              Quedó registrado. {warning.strike >= MAX_STRIKES - 1 ? "Una más y el examen se cierra." : `Con ${MAX_STRIKES} advertencias el examen se cierra automáticamente.`}
             </p>
-            <button
-              type="button"
-              onClick={() => setWarning(null)}
-              className="mt-6 rounded-xl bg-red-800 px-6 py-3 font-semibold text-white shadow-md transition-colors hover:bg-red-700"
-            >
+            <button type="button" onClick={() => setWarning(null)} autoFocus className="mt-6 min-h-12 w-full cursor-pointer rounded-xl bg-asigbo-blue px-6 py-3 text-base font-semibold text-white transition-colors hover:bg-asigbo-blue-dark focus-visible:outline-3 focus-visible:outline-offset-2 focus-visible:outline-asigbo-blue">
               Entendido, continuar
             </button>
           </div>

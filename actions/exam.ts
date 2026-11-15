@@ -20,6 +20,8 @@ export type CreateExamInput = {
   description?: string;
   durationMinutes: number;
   convocatoriaId: string;
+  shuffleQuestions?: boolean;
+  shuffleOptions?: boolean;
   questions: ManualQuestionInput[];
 };
 
@@ -46,7 +48,7 @@ type PreparedOption = {
 
 /** Crea el examen + preguntas + opciones con createMany en una sola transacción. */
 async function persistExam(
-  meta: { title: string; description?: string; durationMinutes: number; convocatoriaId: string },
+  meta: { title: string; description?: string; durationMinutes: number; convocatoriaId: string; shuffleQuestions?: boolean; shuffleOptions?: boolean },
   questions: PreparedQuestion[],
   options: PreparedOption[],
 ): Promise<ActionResult> {
@@ -57,6 +59,8 @@ async function persistExam(
         description: meta.description || null,
         durationMinutes: meta.durationMinutes,
         convocatoriaId: meta.convocatoriaId,
+        shuffleQuestions: !!meta.shuffleQuestions,
+        shuffleOptions: !!meta.shuffleOptions,
         status: "DRAFT",
       },
     });
@@ -152,7 +156,7 @@ const OPTION_COLUMNS = ["OpcionA", "OpcionB", "OpcionC", "OpcionD"] as const;
  * Opcionales: Puntos, ImagenUrl.
  */
 export async function importExamFromCsv(
-  meta: { title: string; description?: string; durationMinutes: number; convocatoriaId: string },
+  meta: { title: string; description?: string; durationMinutes: number; convocatoriaId: string; shuffleQuestions?: boolean; shuffleOptions?: boolean },
   rows: CsvRow[],
 ): Promise<ActionResult> {
   if (!(await hasPermission("exams:write"))) return { ok: false, error: UNAUTHORIZED };

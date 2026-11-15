@@ -10,6 +10,7 @@
   --color-foreground: var(--foreground);
   --font-sans: var(--font-geist-sans);
   --font-mono: var(--font-geist-mono);
+  --font-serif: var(--font-lora), Georgia, serif;
 }
 
 /* Paleta corporativa ASIGBO (Tailwind v4: se declara aquí en lugar de tailwind.config.ts) */
@@ -19,6 +20,7 @@
   --color-asigbo-green: #84cc16;
   --color-asigbo-orange: #f97316;
   --color-asigbo-cyan: #06b6d4;
+  --color-paper: #faf8f4;
 }
 
 body {

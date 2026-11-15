@@ -12,6 +12,8 @@ const securityHeaders = [
 ];
 
 const nextConfig: NextConfig = {
+  // pdfkit lee sus fuentes (.afm) del disco: no debe empaquetarse.
+  serverExternalPackages: ["pdfkit"],
   async headers() {
     return [
       { source: "/:path*", headers: securityHeaders },

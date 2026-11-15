@@ -4,6 +4,8 @@ export type Role = "SUPERADMIN" | "ADMIN" | "REVIEWER";
 export type Permission =
   | "dashboard:view"
   | "results:view"
+  | "ranking:view"
+  | "ranking:decide"
   | "results:export"
   | "live:view"
   | "live:terminate"
@@ -13,14 +15,14 @@ export type Permission =
   | "users:manage";
 
 const ALL: Permission[] = [
-  "dashboard:view", "results:view", "results:export", "live:view", "live:terminate",
+  "dashboard:view", "results:view", "results:export", "ranking:view", "ranking:decide", "live:view", "live:terminate",
   "exams:write", "sessions:manage", "convocatorias:manage", "users:manage",
 ];
 
 const ROLE_PERMISSIONS: Record<Role, ReadonlySet<Permission>> = {
   SUPERADMIN: new Set(ALL),
   ADMIN: new Set(ALL.filter((p) => p !== "users:manage")),
-  REVIEWER: new Set<Permission>(["dashboard:view", "results:view", "live:view"]),
+  REVIEWER: new Set<Permission>(["dashboard:view", "results:view", "ranking:view", "live:view"]),
 };
 
 export const ROLES: Role[] = ["SUPERADMIN", "ADMIN", "REVIEWER"];
@@ -33,7 +35,7 @@ export const ROLE_INFO: Record<Role, { label: string; description: string }> = {
   },
   REVIEWER: {
     label: "Revisor",
-    description: "Solo lectura: dashboard, monitoreo en vivo y resultados. No puede modificar nada ni exportar datos.",
+    description: "Solo lectura: dashboard, monitoreo, resultados y ranking. No puede modificar nada ni exportar datos.",
   },
 };
 

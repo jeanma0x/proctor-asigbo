@@ -5,20 +5,20 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { signOut } from "next-auth/react";
 import {
-  CalendarRange, ClipboardCheck, ClipboardList, KeyRound, LayoutDashboard, LogOut, MonitorPlay, ShieldCheck, UserCog, Users,
+  CalendarRange, ClipboardCheck, ClipboardList, KeyRound, FileBarChart, LayoutDashboard, LogOut, MonitorPlay, ShieldCheck, Trophy, UserCog, Users,
   type LucideIcon,
 } from "lucide-react";
 import { initials } from "@/lib/format";
 import { can, ROLE_INFO, type Permission, type Role } from "@/lib/permissions";
 
-type NavItem = { href: string; label: string; icon: LucideIcon; permission?: Permission };
+type NavItem = { href: string; label: string; icon: LucideIcon; permission?: Permission; also?: string[] };
 
 const GROUPS: { title: string; items: NavItem[] }[] = [
   { title: "Resumen", items: [{ href: "/admin/dashboard", label: "Dashboard", icon: LayoutDashboard, permission: "dashboard:view" }] },
   {
     title: "Operación",
     items: [
-      { href: "/admin/exam-builder", label: "Constructor de Exámenes", icon: ClipboardList, permission: "exams:write" },
+      { href: "/admin/exams", label: "Exámenes", icon: ClipboardList, permission: "exams:write", also: ["/admin/exam-builder"] },
       { href: "/admin/sessions", label: "Enlaces de Acceso", icon: KeyRound, permission: "sessions:manage" },
       { href: "/admin/live", label: "Monitoreo en Vivo", icon: MonitorPlay, permission: "live:view" },
     ],
@@ -28,6 +28,8 @@ const GROUPS: { title: string; items: NavItem[] }[] = [
     items: [
       { href: "/admin/convocatorias", label: "Convocatorias", icon: CalendarRange, permission: "dashboard:view" },
       { href: "/admin/results", label: "Resultados", icon: ClipboardCheck, permission: "results:view" },
+      { href: "/admin/ranking", label: "Ranking", icon: Trophy, permission: "ranking:view" },
+      { href: "/admin/reports", label: "Reportes", icon: FileBarChart, permission: "results:export" },
     ],
   },
   {
@@ -62,8 +64,8 @@ export default function AdminSidebar({ user }: { user: { name: string | null; em
             <p className={`mb-1 hidden px-3 text-xs font-semibold uppercase tracking-wider text-blue-300/70 md:block ${gi > 0 ? "mt-4" : ""}`}>
               {group.title}
             </p>
-            {group.items.map(({ href, label, icon: Icon }) => {
-              const active = pathname === href || pathname.startsWith(`${href}/`);
+            {group.items.map(({ href, label, icon: Icon, also }) => {
+              const active = [href, ...(also ?? [])].some((h) => pathname === h || pathname.startsWith(`${h}/`));
               return (
                 <Link
                   key={href}

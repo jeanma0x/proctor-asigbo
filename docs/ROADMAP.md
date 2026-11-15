@@ -1,12 +1,12 @@
 # Hoja de ruta / mejoras acordadas
 
 ## Prioridad del cliente
-- **Rediseñar las pantallas del candidato** (inicio en modo kiosko y formulario del examen). Se sienten genéricas / "generadas por IA":
+- ~~Rediseñar las pantallas del candidato~~ **Hecho (ronda 3)**: papel cálido, serif en titulares, franja con los 4 colores del logo, copy humano, navegador de preguntas,
+  aviso de tiempo y confirmación de entrega accesible. Pendiente validarlo con candidatos reales y ajustar. Antes se sentían genéricas / "generadas por IA":
   fondo azul degradado oscuro, ícono de escudo genérico, tarjetas estándar. Pendiente: identidad propia de ASIGBO (tono, ilustración, copy humano en
   español guatemalteco, jerarquía y espaciado más cuidados, pantalla de bienvenida cálida). El panel admin está en mejor estado, pero revisar con el mismo criterio.
 
 ## Brechas funcionales detectadas
-- **Editar / duplicar exámenes**: hoy un examen no se puede editar tras crearlo. Falta editar borradores, duplicar y "clonar de la convocatoria anterior".
 - **Calificación manual de preguntas abiertas**: el puntaje automático solo suma opción múltiple; añadir nota por respuesta y recalcular.
 - **Umbral de aprobación y ranking/preselección** de becarios por convocatoria.
 - **Reabrir sesión** de un candidato por falla técnica (con registro de quién lo autorizó).
@@ -25,5 +25,7 @@
 - Informe PDF por candidato y resumen anual de la convocatoria.
 
 ## Hecho
+- Ronda 3: edición/duplicado/cierre/eliminación de exámenes (con bloqueo si ya hay candidatos), orden aleatorio de preguntas y opciones por candidato,
+  ranking (bruto / ponderado por dificultad / ponderado + integridad) con decisiones persistentes, reportería PDF/CSV con membrete, dashboard con KPIs y gráficos.
 - Roles (Superadmin / Administrador / Revisor), desactivar acceso, Convocatorias anuales, Resultados con respuestas, Dashboard e histórico por año,
   límite de intentos de login, invalidación de sesiones, bandeja de aspirantes, envío de correo por SMTP (pendiente de credenciales).

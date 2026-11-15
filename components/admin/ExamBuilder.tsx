@@ -1,6 +1,7 @@
 "use client";
 
 import { useRef, useState, useTransition } from "react";
+import { useRouter } from "next/navigation";
 import Papa from "papaparse";
 import {
   Clock,
@@ -14,6 +15,7 @@ import {
   CheckCircle2,
   AlertCircle,
 } from "lucide-react";
+import { updateExam, type ExamForEdit } from "@/actions/exams-admin";
 import {
   createExamManual,
   importExamFromCsv,
@@ -61,13 +63,29 @@ const inputCls =
 
 export type ConvocatoriaOption = { id: string; name: string; year: number };
 
-export default function ExamBuilder({ convocatorias }: { convocatorias: ConvocatoriaOption[] }) {
+export default function ExamBuilder({ convocatorias, initial }: { convocatorias: ConvocatoriaOption[]; initial?: ExamForEdit }) {
+  const router = useRouter();
+  const editing = !!initial;
+  const locked = !!initial?.locked;
   const [mode, setMode] = useState<"manual" | "csv">("manual");
-  const [title, setTitle] = useState("");
-  const [description, setDescription] = useState("");
-  const [duration, setDuration] = useState(60);
-  const [convocatoriaId, setConvocatoriaId] = useState(convocatorias[0]?.id ?? "");
-  const [questions, setQuestions] = useState<QuestionDraft[]>(() => [initialQuestion()]);
+  const [title, setTitle] = useState(initial?.title ?? "");
+  const [description, setDescription] = useState(initial?.description ?? "");
+  const [duration, setDuration] = useState(initial?.durationMinutes ?? 60);
+  const [convocatoriaId, setConvocatoriaId] = useState(initial?.convocatoriaId || convocatorias[0]?.id || "");
+  const [shuffleQuestions, setShuffleQuestions] = useState(initial?.shuffleQuestions ?? false);
+  const [shuffleOptions, setShuffleOptions] = useState(initial?.shuffleOptions ?? false);
+  const [questions, setQuestions] = useState<QuestionDraft[]>(() =>
+    initial && initial.questions.length
+      ? initial.questions.map((q, i) => ({
+          id: `q-edit-${i}`,
+          text: q.text,
+          type: q.type,
+          points: q.points,
+          imageUrl: q.imageUrl,
+          options: q.options.map((o, j) => ({ id: `o-edit-${i}-${j}`, text: o.text, isCorrect: o.isCorrect })),
+        }))
+      : [initialQuestion()],
+  );
   const [csvRows, setCsvRows] = useState<CsvRow[]>([]);
   const [csvName, setCsvName] = useState("");
   const [result, setResult] = useState<ActionResult | null>(null);
@@ -120,6 +138,27 @@ export default function ExamBuilder({ convocatorias }: { convocatorias: Convocat
     });
   };
 
+  const submitEdit = () => {
+    if (!initial) return;
+    setResult(null);
+    startTransition(async () => {
+      const res = await updateExam(initial.id, {
+        title,
+        description,
+        durationMinutes: duration,
+        convocatoriaId,
+        shuffleQuestions,
+        shuffleOptions,
+        questions: locked
+          ? undefined
+          : questions.map((q) => ({ text: q.text, type: q.type, points: q.points, imageUrl: q.imageUrl, options: q.type === "MULTIPLE_CHOICE" ? q.options : [] })),
+      });
+      if (!res.ok) return setResult(res);
+      router.push("/admin/exams");
+      router.refresh();
+    });
+  };
+
   const submitManual = () => {
     setResult(null);
     startTransition(async () => {
@@ -128,6 +167,8 @@ export default function ExamBuilder({ convocatorias }: { convocatorias: Convocat
         description,
         durationMinutes: duration,
         convocatoriaId,
+        shuffleQuestions,
+        shuffleOptions,
         questions: questions.map((q) => ({
           text: q.text,
           type: q.type,
@@ -148,7 +189,7 @@ export default function ExamBuilder({ convocatorias }: { convocatorias: Convocat
   const submitCsv = () => {
     setResult(null);
     startTransition(async () => {
-      const res = await importExamFromCsv({ title, description, durationMinutes: duration, convocatoriaId }, csvRows);
+      const res = await importExamFromCsv({ title, description, durationMinutes: duration, convocatoriaId, shuffleQuestions, shuffleOptions }, csvRows);
       setResult(res);
       if (res.ok) {
         setCsvRows([]);
@@ -195,11 +236,26 @@ export default function ExamBuilder({ convocatorias }: { convocatorias: Convocat
             <span className="mb-1 block text-sm font-medium">Descripción (opcional)</span>
             <textarea className={inputCls} rows={2} value={description} onChange={(e) => setDescription(e.target.value)} />
           </label>
+          <fieldset className="sm:col-span-3 grid gap-3 sm:grid-cols-2">
+            <legend className="mb-1 text-sm font-medium">Orden aleatorio</legend>
+            {([
+              ["Mezclar el orden de las preguntas", "Cada candidato ve las preguntas en un orden distinto (se mantiene si recarga).", shuffleQuestions, setShuffleQuestions],
+              ["Mezclar las opciones de respuesta", "Las opciones de opción múltiple también cambian de orden por candidato.", shuffleOptions, setShuffleOptions],
+            ] as const).map(([label, hint, on, set]) => (
+              <label key={label} className={`flex cursor-pointer items-start gap-3 rounded-xl border p-3 transition-colors ${on ? "border-asigbo-blue bg-asigbo-blue/5" : "border-slate-200 hover:bg-slate-50"}`}>
+                <input type="checkbox" checked={on} onChange={(e) => set(e.target.checked)} className="mt-1 h-4 w-4 accent-asigbo-blue" />
+                <span>
+                  <span className="block text-sm font-medium">{label}</span>
+                  <span className="block text-xs text-slate-500">{hint}</span>
+                </span>
+              </label>
+            ))}
+          </fieldset>
         </div>
       </section>
 
       {/* Selector de modo */}
-      <div className="mb-6 inline-flex rounded-2xl border border-slate-200 bg-white p-1 shadow-sm">
+      {!editing && <div className="mb-6 inline-flex rounded-2xl border border-slate-200 bg-white p-1 shadow-sm">
         {(
           [
             ["manual", "Manual", ListChecks],
@@ -220,9 +276,17 @@ export default function ExamBuilder({ convocatorias }: { convocatorias: Convocat
             <Icon className="h-4 w-4" /> {label}
           </button>
         ))}
-      </div>
+      </div>}
 
-      {mode === "manual" ? (
+      {locked ? (
+        <section className="rounded-2xl border border-amber-200 bg-amber-50 p-6 text-sm text-amber-950">
+          <p className="font-semibold">Las preguntas están bloqueadas</p>
+          <p className="mt-1">Ya hay candidatos que iniciaron este examen, así que no se pueden modificar preguntas ni puntos sin alterar los resultados históricos. Puedes cambiar título, descripción, duración y orden aleatorio. Para otra versión, duplica el examen desde la lista.</p>
+          <button type="button" onClick={submitEdit} disabled={pending} className="mt-4 rounded-xl bg-asigbo-blue px-6 py-2.5 text-sm font-semibold text-white shadow transition-colors hover:bg-asigbo-blue-dark disabled:opacity-50">
+            {pending ? "Guardando…" : "Guardar cambios"}
+          </button>
+        </section>
+      ) : mode === "manual" ? (
         <section className="space-y-6">
           {questions.map((q, idx) => (
             <article key={q.id} className="rounded-2xl border border-slate-200 bg-white p-8 shadow-sm">
@@ -357,11 +421,11 @@ export default function ExamBuilder({ convocatorias }: { convocatorias: Convocat
             </p>
             <button
               type="button"
-              onClick={submitManual}
+              onClick={editing ? submitEdit : submitManual}
               disabled={pending || !convocatoriaId}
               className="rounded-xl bg-asigbo-blue px-6 py-2.5 text-sm font-semibold text-white shadow transition-colors hover:bg-asigbo-blue-dark disabled:opacity-50"
             >
-              {pending ? "Guardando…" : "Guardar examen"}
+              {pending ? "Guardando…" : editing ? "Guardar cambios" : "Guardar examen"}
             </button>
           </div>
         </section>

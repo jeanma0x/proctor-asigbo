@@ -57,6 +57,12 @@ enum AdminRole {
   REVIEWER // solo lectura: dashboard, monitoreo y resultados
 }
 
+enum SelectionDecision {
+  SELECTED
+  WAITLIST
+  NOT_SELECTED
+}
+
 enum ConvocatoriaStatus {
   ACTIVE
   ARCHIVED
@@ -101,6 +107,10 @@ model Exam {
   opensAt         DateTime?
   closesAt        DateTime?
   convocatoriaId  String?
+  /// Cada candidato ve las preguntas en un orden distinto (determinista por sesión)
+  shuffleQuestions Boolean   @default(false)
+  /// Ídem para las opciones de las preguntas de opción múltiple
+  shuffleOptions   Boolean   @default(false)
   createdAt       DateTime   @default(now())
   updatedAt       DateTime   @updatedAt
 
@@ -155,6 +165,9 @@ model CandidateSession {
   flagCount   Int           @default(0)
   /// Última vez que se envió la invitación por correo
   emailSentAt DateTime?
+  /// Decisión de la Junta tras el ranking (histórico de seleccionados por convocatoria)
+  decision    SelectionDecision?
+  decidedAt   DateTime?
   createdAt   DateTime      @default(now())
   updatedAt   DateTime      @updatedAt
 
