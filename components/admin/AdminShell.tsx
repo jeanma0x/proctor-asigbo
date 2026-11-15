@@ -1,3 +1,4 @@
+import { Suspense } from "react";
 import { redirect } from "next/navigation";
 import { ShieldAlert } from "lucide-react";
 import AdminSidebar from "@/components/admin/AdminSidebar";
@@ -16,7 +17,9 @@ export default async function AdminShell({ children }: { children: React.ReactNo
 
   return (
     <div className="flex min-h-screen flex-col bg-slate-50 md:flex-row">
-      <AdminSidebar user={{ name: admin.name, email: admin.email }} />
+      <Suspense fallback={null}>
+        <AdminSidebar user={{ name: admin.name, email: admin.email, role: admin.role }} />
+      </Suspense>
       <div className="min-w-0 flex-1">
         {admin.mustChangePassword ? (
           <PageContainer>

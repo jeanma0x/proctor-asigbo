@@ -1,11 +1,12 @@
 import { Suspense } from "react";
 import type { Metadata } from "next";
 import { Users } from "lucide-react";
+import Gate from "@/components/admin/Gate";
 import UsersManager from "@/components/admin/UsersManager";
 import { PageContainer, PageHeader } from "@/components/admin/ui";
 import { listAdmins } from "@/actions/users";
 
-export const metadata: Metadata = { title: "Administradores · ASIGBO Proctoring" };
+export const metadata: Metadata = { title: "Usuarios y roles · ASIGBO Proctoring" };
 
 async function UsersContent() {
   const data = await listAdmins();
@@ -28,11 +29,11 @@ export default function UsersPage() {
       <PageHeader
         icon={Users}
         eyebrow="Administración"
-        title="Administradores"
-        description="Personas de la Junta Directiva con acceso al panel."
+        title="Usuarios y roles"
+        description="Quién puede ingresar al panel y qué puede hacer cada persona."
       />
       <Suspense fallback={<p className="text-sm text-slate-500">Cargando…</p>}>
-        <UsersContent />
+        <Gate permission="users:manage"><UsersContent /></Gate>
       </Suspense>
     </PageContainer>
   );

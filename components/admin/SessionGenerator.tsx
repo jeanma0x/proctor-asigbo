@@ -1,24 +1,25 @@
 "use client";
 
-import { useMemo, useRef, useState, useTransition } from "react";
+import { useRef, useState, useTransition, type ClipboardEvent, type DragEvent, type KeyboardEvent } from "react";
 import Link from "next/link";
 import useSWR from "swr";
 import { useRouter } from "next/navigation";
 import {
   AlertCircle, Check, CheckCircle2, Copy, Download, FileUp, Info, Link2, Loader2, Mail, MessageCircle,
-  Rocket, Search, Send, Users,
+  Plus, Rocket, Search, Send, UserPlus, X,
 } from "lucide-react";
 import { generateSessions, listExamSessions, sendInvitations, type ExamSessionRow } from "@/actions/sessions";
 import { publishExam } from "@/actions/exam";
 import { btnGhost, btnPrimary, card, inputCls } from "@/components/admin/ui";
 import { parseCandidates } from "@/lib/parse-candidates";
-import { fmtDate } from "@/lib/format";
+import { fmtDate, initials } from "@/lib/format";
 
 type ExamOption = {
   id: string;
   title: string;
   status: "DRAFT" | "PUBLISHED";
   durationMinutes: number;
+  convocatoria: string | null;
   questionCount: number;
 };
 
@@ -48,7 +49,10 @@ export default function SessionGenerator({ exams, emailEnabled }: { exams: ExamO
   const drafts = exams.filter((e) => e.status === "DRAFT");
 
   const [selected, setSelected] = useState(published[0]?.id ?? "");
-  const [raw, setRaw] = useState("");
+  const [draft, setDraft] = useState("");
+  const [draftError, setDraftError] = useState<string | null>(null);
+  const [tray, setTray] = useState<{ email: string; name: string }[]>([]);
+  const [dragging, setDragging] = useState(false);
   const [notice, setNotice] = useState<{ ok: boolean; text: string } | null>(null);
   const [copied, setCopied] = useState<string | null>(null);
   const [search, setSearch] = useState("");
@@ -58,7 +62,6 @@ export default function SessionGenerator({ exams, emailEnabled }: { exams: ExamO
 
   const exam = published.find((e) => e.id === selected) ?? published[0];
   const examId = exam?.id ?? "";
-  const parsed = useMemo(() => parseCandidates(raw), [raw]);
 
   const { data: rows = [], isLoading, mutate } = useSWR(
     examId ? ["exam-sessions", examId] : null,
@@ -80,26 +83,70 @@ export default function SessionGenerator({ exams, emailEnabled }: { exams: ExamO
     }
   };
 
-  const onImportFile = async (file: File | undefined) => {
+  /** Agrega a la bandeja todo lo que se detecte en el texto (un correo, una lista o filas pegadas de Excel). */
+  const addToTray = (text: string): number => {
+    const found = parseCandidates(text);
+    if (found.length === 0) return 0;
+    setTray((prev) => {
+      const have = new Set(prev.map((c) => c.email));
+      return [...prev, ...found.filter((c) => !have.has(c.email))];
+    });
+    return found.length;
+  };
+
+  const commitDraft = () => {
+    const text = draft.trim();
+    if (!text) return;
+    if (addToTray(text) === 0) return setDraftError("No encontré un correo válido. Ejemplo: ana@correo.com");
+    setDraft("");
+    setDraftError(null);
+  };
+
+  const onDraftKey = (e: KeyboardEvent<HTMLInputElement>) => {
+    if (e.key === "Enter" || e.key === ",") {
+      e.preventDefault();
+      commitDraft();
+    }
+  };
+
+  const onDraftPaste = (e: ClipboardEvent<HTMLInputElement>) => {
+    const text = e.clipboardData.getData("text");
+    // Una lista (varias líneas, tabs o varios correos) se agrega de inmediato, sin pasar por el campo.
+    if (/[\n\t]/.test(text.trim()) || (text.match(/@/g) ?? []).length > 1) {
+      e.preventDefault();
+      if (addToTray(text) === 0) setDraftError("No encontré correos válidos en lo que pegaste.");
+      else setDraftError(null);
+    }
+  };
+
+  const readFile = async (file: File | undefined) => {
     if (!file) return;
     if (file.size > 1_000_000) return setNotice({ ok: false, text: "El archivo es demasiado grande (máx. 1 MB)." });
-    const text = await file.text();
-    setRaw((prev) => (prev.trim() ? `${prev.trim()}\n${text}` : text));
+    const n = addToTray(await file.text());
+    if (n === 0) setNotice({ ok: false, text: "No encontré correos en ese archivo. Debe ser CSV o TXT con una columna de correos." });
     if (fileRef.current) fileRef.current.value = "";
   };
+
+  const onDrop = (e: DragEvent) => {
+    e.preventDefault();
+    setDragging(false);
+    void readFile(e.dataTransfer.files?.[0]);
+  };
+
+  const existingEmails = new Set(rows.map((r) => r.email));
+  const fresh = tray.filter((c) => !existingEmails.has(c.email));
+  const alreadyThere = tray.length - fresh.length;
 
   const enable = () => {
     setNotice(null);
     startTransition(async () => {
-      const res = await generateSessions(examId, parsed);
+      const res = await generateSessions(examId, fresh);
       if (!res.ok) return setNotice({ ok: false, text: res.error });
-      const fresh = res.rows.filter((r) => !r.existing).length;
-      const existing = res.rows.length - fresh;
       setNotice({
         ok: true,
-        text: `${fresh} aspirante(s) habilitado(s)${existing ? ` · ${existing} ya tenía(n) acceso` : ""}. Ahora envíales su enlace desde la tabla de abajo.`,
+        text: `${res.rows.length} aspirante(s) habilitado(s). Ahora envíales su enlace desde la tabla de abajo.`,
       });
-      setRaw("");
+      setTray([]);
       await mutate();
     });
   };
@@ -191,7 +238,7 @@ export default function SessionGenerator({ exams, emailEnabled }: { exams: ExamO
                   <span className="font-semibold">{e.title}</span>
                   {on && <CheckCircle2 className="h-5 w-5 shrink-0 text-asigbo-blue" aria-hidden="true" />}
                 </span>
-                <span className="mt-1 block text-xs text-slate-600">{e.questionCount} preguntas · {e.durationMinutes} min</span>
+                <span className="mt-1 block text-xs text-slate-600">{e.convocatoria ? `${e.convocatoria} · ` : ""}{e.questionCount} preguntas · {e.durationMinutes} min</span>
               </button>
             );
           })}
@@ -213,42 +260,79 @@ export default function SessionGenerator({ exams, emailEnabled }: { exams: ExamO
       </section>
 
       {/* Paso 2 */}
-      <section className={`${card} p-6`}>
-        <StepTitle n={2} title="Agrega a los aspirantes" hint="Pega correos (con o sin nombre) o importa un archivo CSV/TXT." />
-        <textarea
-          aria-label="Aspirantes"
-          className={`${inputCls} font-mono`}
-          rows={5}
-          value={raw}
-          onChange={(e) => setRaw(e.target.value)}
-          disabled={!examId}
-          placeholder={"Ana Pérez, ana@correo.com\nLuis Gómez <luis@correo.com>\nmaria@correo.com"}
-        />
-        <div className="mt-3 flex flex-wrap items-center justify-between gap-3">
-          <div className="flex flex-wrap items-center gap-3 text-sm">
-            <input ref={fileRef} type="file" accept=".csv,.txt,text/csv,text/plain" className="sr-only" id="import-file" onChange={(e) => onImportFile(e.target.files?.[0])} />
-            <label htmlFor="import-file" className={`${btnGhost} cursor-pointer`}>
-              <FileUp className="h-4 w-4" aria-hidden="true" /> Importar archivo
-            </label>
-            <span className={`flex items-center gap-1.5 ${parsed.length ? "font-semibold text-asigbo-blue" : "text-slate-500"}`}>
-              <Users className="h-4 w-4" aria-hidden="true" /> {parsed.length} aspirante(s) detectado(s)
-            </span>
+      <section className={`${card} p-6`} onDragOver={(e) => { e.preventDefault(); setDragging(true); }} onDragLeave={() => setDragging(false)} onDrop={onDrop}>
+        <StepTitle n={2} title="Agrega a los aspirantes" hint="Escribe un correo, pega una lista o arrastra un archivo. El nombre se detecta solo y lo puedes corregir." />
+        <div className="flex flex-wrap gap-2">
+          <div className="relative min-w-64 flex-1">
+            <UserPlus className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" aria-hidden="true" />
+            <input
+              aria-label="Correo del aspirante"
+              value={draft}
+              disabled={!examId}
+              onChange={(e) => { setDraft(e.target.value); setDraftError(null); }}
+              onKeyDown={onDraftKey}
+              onPaste={onDraftPaste}
+              placeholder="Escribe un correo y presiona Enter, o pega una lista…"
+              className={`${inputCls} pl-9`}
+              autoComplete="off"
+              inputMode="email"
+            />
           </div>
-          <button type="button" onClick={enable} disabled={pending || !examId || parsed.length === 0} className={btnPrimary}>
+          <button type="button" onClick={commitDraft} disabled={!draft.trim() || !examId} className={btnGhost}>
+            <Plus className="h-4 w-4" aria-hidden="true" /> Agregar
+          </button>
+          <input ref={fileRef} type="file" accept=".csv,.txt,text/csv,text/plain" className="sr-only" id="import-file" onChange={(e) => readFile(e.target.files?.[0])} />
+          <label htmlFor="import-file" className={`${btnGhost} cursor-pointer`}>
+            <FileUp className="h-4 w-4" aria-hidden="true" /> Importar CSV
+          </label>
+        </div>
+        {draftError && <p role="alert" className="mt-2 text-sm text-red-700">{draftError}</p>}
+
+        <div className={`mt-4 rounded-xl border-2 border-dashed transition-colors ${dragging ? "border-asigbo-blue bg-asigbo-blue/5" : "border-slate-200"}`}>
+          {tray.length === 0 ? (
+            <div className="px-6 py-8 text-center text-sm text-slate-600">
+              <p className="font-medium text-slate-800">La bandeja está vacía</p>
+              <p className="mt-1">Copia las columnas de <strong>nombre y correo</strong> desde Excel o Google Sheets y pégalas en el campo de arriba.</p>
+              <p className="text-xs text-slate-500">También puedes arrastrar aquí un archivo CSV.</p>
+            </div>
+          ) : (
+            <>
+              <div className="flex items-center justify-between border-b border-slate-100 px-4 py-2.5 text-sm">
+                <span className="font-semibold">{tray.length} en la bandeja{alreadyThere > 0 && <span className="ml-2 font-normal text-slate-500">· {alreadyThere} ya tiene(n) acceso</span>}</span>
+                <button type="button" onClick={() => setTray([])} className="cursor-pointer text-xs font-medium text-slate-500 hover:text-red-700">Vaciar</button>
+              </div>
+              <ul className="max-h-80 divide-y divide-slate-100 overflow-y-auto">
+                {tray.map((c) => {
+                  const exists = existingEmails.has(c.email);
+                  return (
+                    <li key={c.email} className="flex items-center gap-3 px-4 py-2">
+                      <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-asigbo-blue/10 text-xs font-bold text-asigbo-blue">{initials(c.name, c.email)}</span>
+                      <input
+                        aria-label={`Nombre de ${c.email}`}
+                        value={c.name}
+                        maxLength={120}
+                        onChange={(e) => setTray((t) => t.map((x) => (x.email === c.email ? { ...x, name: e.target.value } : x)))}
+                        className="min-w-0 flex-1 rounded-lg border border-transparent bg-transparent px-2 py-1 text-sm font-medium hover:border-slate-300 focus:border-asigbo-blue focus:bg-white focus:outline-none"
+                      />
+                      <span className="hidden min-w-0 shrink truncate text-xs text-slate-500 sm:block sm:max-w-56">{c.email}</span>
+                      {exists && <span className="shrink-0 rounded-full bg-slate-100 px-2 py-0.5 text-xs font-medium text-slate-600">Ya tiene acceso</span>}
+                      <button type="button" onClick={() => setTray((t) => t.filter((x) => x.email !== c.email))} aria-label={`Quitar a ${c.email}`} className="cursor-pointer rounded-lg p-1.5 text-slate-400 hover:bg-red-50 hover:text-red-600">
+                        <X className="h-4 w-4" aria-hidden="true" />
+                      </button>
+                    </li>
+                  );
+                })}
+              </ul>
+            </>
+          )}
+        </div>
+
+        <div className="mt-4 flex justify-end">
+          <button type="button" onClick={enable} disabled={pending || !examId || fresh.length === 0} className={btnPrimary}>
             {pending ? <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" /> : <Link2 className="h-4 w-4" aria-hidden="true" />}
-            {pending ? "Habilitando…" : parsed.length ? `Habilitar ${parsed.length} aspirante(s)` : "Habilitar aspirantes"}
+            {pending ? "Habilitando…" : fresh.length ? `Habilitar ${fresh.length} aspirante${fresh.length === 1 ? "" : "s"}` : "Habilitar aspirantes"}
           </button>
         </div>
-        {parsed.length > 0 && (
-          <ul className="mt-4 flex flex-wrap gap-2" aria-label="Vista previa de aspirantes detectados">
-            {parsed.slice(0, 12).map((c) => (
-              <li key={c.email} className="rounded-full bg-slate-100 px-3 py-1 text-xs text-slate-700">
-                <span className="font-medium">{c.name}</span> · {c.email}
-              </li>
-            ))}
-            {parsed.length > 12 && <li className="rounded-full bg-slate-100 px-3 py-1 text-xs text-slate-500">+{parsed.length - 12} más</li>}
-          </ul>
-        )}
       </section>
 
       {/* Paso 3 */}

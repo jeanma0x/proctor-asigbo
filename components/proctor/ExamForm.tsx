@@ -270,7 +270,9 @@ export default function ExamForm({
           ) : (
             <div className="flex items-center gap-3 rounded-xl border border-amber-300 bg-amber-50 p-3">
               <span className="text-sm text-amber-900">
-                ¿Entregar ahora? Tienes {questions.length - answered} sin responder.
+                {questions.length - answered === 0
+                  ? "Respondiste todas las preguntas. ¿Entregar el examen ahora?"
+                  : `Te falta${questions.length - answered === 1 ? "" : "n"} ${questions.length - answered} pregunta${questions.length - answered === 1 ? "" : "s"} por responder. ¿Entregar de todos modos?`}
               </span>
               <button
                 type="button"

@@ -2,16 +2,19 @@
 
 import { useState, useTransition, type FormEvent } from "react";
 import { useRouter } from "next/navigation";
-import { AlertCircle, Check, Copy, KeyRound, Loader2, RefreshCw, Trash2, UserPlus } from "lucide-react";
-import { createAdmin, deleteAdmin, resetAdminPassword } from "@/actions/users";
+import { AlertCircle, Check, Copy, KeyRound, Loader2, Power, RefreshCw, Trash2, UserPlus } from "lucide-react";
+import { createAdmin, deleteAdmin, resetAdminPassword, setAdminActive, setAdminRole } from "@/actions/users";
 import { btnGhost, btnPrimary, card, inputCls } from "@/components/admin/ui";
 import { fmtDateTime, initials } from "@/lib/format";
 import { generatePassword } from "@/lib/password";
+import { ROLES, ROLE_INFO, type Role } from "@/lib/permissions";
 
 type Row = {
   id: string;
   name: string | null;
   email: string;
+  role: Role;
+  isActive: boolean;
   createdAt: string;
   lastLoginAt: string | null;
   mustChangePassword: boolean;
@@ -19,11 +22,18 @@ type Row = {
 
 type Credentials = { email: string; password: string; reset: boolean };
 
+const ROLE_BADGE: Record<Role, string> = {
+  SUPERADMIN: "bg-asigbo-blue text-white",
+  ADMIN: "bg-sky-100 text-sky-900",
+  REVIEWER: "bg-slate-200 text-slate-800",
+};
+
 export default function UsersManager({ me, admins }: { me: string; admins: Row[] }) {
   const router = useRouter();
   const [pending, startTransition] = useTransition();
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
+  const [role, setRole] = useState<Role>("ADMIN");
   const [password, setPassword] = useState(() => generatePassword());
   const [error, setError] = useState<string | null>(null);
   const [creds, setCreds] = useState<Credentials | null>(null);
@@ -40,37 +50,36 @@ export default function UsersManager({ me, admins }: { me: string; admins: Row[]
     }
   };
 
-  const onCreate = (e: FormEvent) => {
-    e.preventDefault();
+  const run = (fn: () => Promise<{ ok: boolean; error?: string }>, after?: () => void) => {
     setError(null);
-    setCreds(null);
     startTransition(async () => {
-      const res = await createAdmin({ name, email, password });
-      if (!res.ok) return setError(res.error);
-      setCreds({ email: email.trim().toLowerCase(), password, reset: false });
-      setName("");
-      setEmail("");
-      setPassword(generatePassword());
+      const res = await fn();
+      if (!res.ok) return setError(res.error ?? "No se pudo completar la acción.");
+      after?.();
       router.refresh();
     });
   };
 
+  const onCreate = (e: FormEvent) => {
+    e.preventDefault();
+    setCreds(null);
+    run(
+      () => createAdmin({ name, email, password, role }),
+      () => {
+        setCreds({ email: email.trim().toLowerCase(), password, reset: false });
+        setName("");
+        setEmail("");
+        setPassword(generatePassword());
+      },
+    );
+  };
+
   const onConfirm = (row: Row, kind: "delete" | "reset") => {
-    setError(null);
     setCreds(null);
     setConfirming(null);
-    startTransition(async () => {
-      if (kind === "delete") {
-        const res = await deleteAdmin(row.id);
-        if (!res.ok) return setError(res.error);
-      } else {
-        const pw = generatePassword();
-        const res = await resetAdminPassword(row.id, pw);
-        if (!res.ok) return setError(res.error);
-        setCreds({ email: row.email, password: pw, reset: true });
-      }
-      router.refresh();
-    });
+    if (kind === "delete") return run(() => deleteAdmin(row.id));
+    const pw = generatePassword();
+    run(() => resetAdminPassword(row.id, pw), () => setCreds({ email: row.email, password: pw, reset: true }));
   };
 
   return (
@@ -84,7 +93,7 @@ export default function UsersManager({ me, admins }: { me: string; admins: Row[]
       {creds && (
         <div role="status" className="rounded-2xl border border-emerald-200 bg-emerald-50 p-5">
           <p className="font-semibold text-emerald-900">
-            {creds.reset ? "Contraseña restablecida" : "Administrador creado"} — comparte estas credenciales de forma segura
+            {creds.reset ? "Contraseña restablecida" : "Usuario creado"} — comparte estas credenciales de forma segura
           </p>
           <p className="mt-1 text-sm text-emerald-800">
             Esta contraseña es temporal y <strong>no volverá a mostrarse</strong>. Se pedirá cambiarla en el primer ingreso.
@@ -104,7 +113,7 @@ export default function UsersManager({ me, admins }: { me: string; admins: Row[]
 
       <section className={`${card} p-6`}>
         <h2 className="mb-4 flex items-center gap-2 font-semibold">
-          <UserPlus className="h-5 w-5 text-asigbo-blue" aria-hidden="true" /> Agregar administrador
+          <UserPlus className="h-5 w-5 text-asigbo-blue" aria-hidden="true" /> Agregar usuario
         </h2>
         <form onSubmit={onCreate} className="grid gap-4 md:grid-cols-2">
           <div>
@@ -114,6 +123,22 @@ export default function UsersManager({ me, admins }: { me: string; admins: Row[]
           <div>
             <label htmlFor="u-email" className="text-sm font-medium text-slate-700">Correo electrónico</label>
             <input id="u-email" type="email" required value={email} onChange={(e) => setEmail(e.target.value)} className={`${inputCls} mt-1`} placeholder="persona@correo.com" />
+          </div>
+          <div className="md:col-span-2">
+            <span className="text-sm font-medium text-slate-700">Rol</span>
+            <div className="mt-1 grid gap-3 sm:grid-cols-3" role="radiogroup" aria-label="Rol">
+              {ROLES.map((r) => (
+                <button
+                  key={r} type="button" role="radio" aria-checked={role === r} onClick={() => setRole(r)}
+                  className={`cursor-pointer rounded-xl border-2 p-3 text-left transition-colors focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-asigbo-blue ${
+                    role === r ? "border-asigbo-blue bg-asigbo-blue/5" : "border-slate-200 hover:border-slate-300"
+                  }`}
+                >
+                  <span className="block text-sm font-semibold">{ROLE_INFO[r].label}</span>
+                  <span className="mt-0.5 block text-xs text-slate-600">{ROLE_INFO[r].description}</span>
+                </button>
+              ))}
+            </div>
           </div>
           <div className="md:col-span-2">
             <label htmlFor="u-pass" className="text-sm font-medium text-slate-700">Contraseña temporal</label>
@@ -128,7 +153,7 @@ export default function UsersManager({ me, admins }: { me: string; admins: Row[]
           <div className="md:col-span-2">
             <button type="submit" disabled={pending} className={btnPrimary}>
               {pending ? <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" /> : <UserPlus className="h-4 w-4" aria-hidden="true" />}
-              Crear administrador
+              Crear usuario
             </button>
           </div>
         </form>
@@ -136,13 +161,14 @@ export default function UsersManager({ me, admins }: { me: string; admins: Row[]
 
       <section className={`${card} overflow-hidden`}>
         <div className="border-b border-slate-100 px-6 py-4">
-          <h2 className="font-semibold">{admins.length} administrador(es) con acceso</h2>
+          <h2 className="font-semibold">{admins.length} usuario(s) · {admins.filter((a) => a.isActive).length} con acceso activo</h2>
         </div>
         <div className="overflow-x-auto">
           <table className="w-full text-left text-sm">
             <thead className="bg-slate-50 text-xs uppercase tracking-wide text-slate-500">
               <tr>
                 <th className="px-6 py-3 font-semibold">Usuario</th>
+                <th className="px-4 py-3 font-semibold">Rol</th>
                 <th className="px-4 py-3 font-semibold">Último ingreso</th>
                 <th className="px-4 py-3 font-semibold">Estado</th>
                 <th className="px-6 py-3" />
@@ -153,7 +179,7 @@ export default function UsersManager({ me, admins }: { me: string; admins: Row[]
                 const isMe = a.id === me;
                 const c = confirming?.id === a.id ? confirming.kind : null;
                 return (
-                  <tr key={a.id} className="border-t border-slate-100">
+                  <tr key={a.id} className={`border-t border-slate-100 ${a.isActive ? "" : "bg-slate-50/70 text-slate-500"}`}>
                     <td className="px-6 py-3">
                       <div className="flex items-center gap-3">
                         <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-asigbo-blue/10 text-xs font-bold text-asigbo-blue">
@@ -162,15 +188,30 @@ export default function UsersManager({ me, admins }: { me: string; admins: Row[]
                         <div className="min-w-0">
                           <p className="truncate font-medium">
                             {a.name || a.email.split("@")[0]}
-                            {isMe && <span className="ml-2 rounded-full bg-asigbo-blue px-2 py-0.5 text-xs font-semibold text-white">Tú</span>}
+                            {isMe && <span className="ml-2 rounded-full bg-asigbo-green px-2 py-0.5 text-xs font-semibold text-asigbo-blue-dark">Tú</span>}
                           </p>
                           <p className="truncate text-xs text-slate-500">{a.email}</p>
                         </div>
                       </div>
                     </td>
+                    <td className="px-4 py-3">
+                      {isMe ? (
+                        <span className={`rounded-full px-2.5 py-1 text-xs font-semibold ${ROLE_BADGE[a.role]}`}>{ROLE_INFO[a.role].label}</span>
+                      ) : (
+                        <select
+                          aria-label={`Rol de ${a.email}`} value={a.role} disabled={pending}
+                          onChange={(e) => run(() => setAdminRole(a.id, e.target.value as Role))}
+                          className="cursor-pointer rounded-lg border border-slate-300 bg-white px-2 py-1.5 text-xs font-medium text-slate-800 focus-visible:outline-2 focus-visible:outline-asigbo-blue"
+                        >
+                          {ROLES.map((r) => <option key={r} value={r}>{ROLE_INFO[r].label}</option>)}
+                        </select>
+                      )}
+                    </td>
                     <td className="whitespace-nowrap px-4 py-3 text-slate-600">{fmtDateTime(a.lastLoginAt)}</td>
                     <td className="px-4 py-3">
-                      {a.mustChangePassword ? (
+                      {!a.isActive ? (
+                        <span className="rounded-full bg-slate-200 px-2.5 py-1 text-xs font-semibold text-slate-700">Desactivado</span>
+                      ) : a.mustChangePassword ? (
                         <span className="rounded-full bg-amber-100 px-2.5 py-1 text-xs font-semibold text-amber-800">Contraseña temporal</span>
                       ) : (
                         <span className="rounded-full bg-emerald-100 px-2.5 py-1 text-xs font-semibold text-emerald-800">Activo</span>
@@ -179,7 +220,7 @@ export default function UsersManager({ me, admins }: { me: string; admins: Row[]
                     <td className="px-6 py-3">
                       {isMe ? null : c ? (
                         <div className="flex items-center justify-end gap-2">
-                          <span className="text-xs text-slate-600">{c === "delete" ? "¿Eliminar acceso?" : "¿Nueva contraseña?"}</span>
+                          <span className="text-xs text-slate-600">{c === "delete" ? "¿Eliminar usuario?" : "¿Nueva contraseña?"}</span>
                           <button type="button" onClick={() => onConfirm(a, c)} disabled={pending} className="cursor-pointer rounded-lg bg-red-600 px-3 py-1.5 text-xs font-semibold text-white transition-colors hover:bg-red-700 disabled:opacity-50">
                             Confirmar
                           </button>
@@ -187,6 +228,13 @@ export default function UsersManager({ me, admins }: { me: string; admins: Row[]
                         </div>
                       ) : (
                         <div className="flex items-center justify-end gap-2">
+                          <button
+                            type="button" disabled={pending}
+                            onClick={() => run(() => setAdminActive(a.id, !a.isActive))}
+                            className={`${btnGhost} !px-3 !py-1.5 text-xs`}
+                          >
+                            <Power className="h-3.5 w-3.5" aria-hidden="true" /> {a.isActive ? "Desactivar acceso" : "Reactivar"}
+                          </button>
                           <button type="button" onClick={() => setConfirming({ id: a.id, kind: "reset" })} className={`${btnGhost} !px-3 !py-1.5 text-xs`}>
                             <KeyRound className="h-3.5 w-3.5" aria-hidden="true" /> Restablecer
                           </button>

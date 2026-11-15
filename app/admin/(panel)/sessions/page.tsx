@@ -3,6 +3,7 @@ import type { Metadata } from "next";
 import { KeyRound } from "lucide-react";
 import { prisma } from "@/lib/prisma";
 import { emailConfigured } from "@/lib/email";
+import Gate from "@/components/admin/Gate";
 import SessionGenerator from "@/components/admin/SessionGenerator";
 import { PageContainer, PageHeader } from "@/components/admin/ui";
 
@@ -15,7 +16,7 @@ async function SessionsContent() {
   const exams = await prisma.exam.findMany({
     where: { status: { in: ["DRAFT", "PUBLISHED"] } },
     orderBy: { createdAt: "desc" },
-    select: { id: true, title: true, status: true, durationMinutes: true, _count: { select: { questions: true } } },
+    select: { id: true, title: true, status: true, durationMinutes: true, convocatoria: { select: { name: true } }, _count: { select: { questions: true } } },
   });
   return (
     <SessionGenerator
@@ -25,6 +26,7 @@ async function SessionsContent() {
         title: e.title,
         status: e.status as "DRAFT" | "PUBLISHED",
         durationMinutes: e.durationMinutes,
+        convocatoria: e.convocatoria?.name ?? null,
         questionCount: e._count.questions,
       }))}
     />
@@ -41,7 +43,7 @@ export default function SessionsPage() {
         description="Habilita aspirantes y envíales su enlace personal por correo o WhatsApp."
       />
       <Suspense fallback={<p className="text-sm text-slate-500">Cargando…</p>}>
-        <SessionsContent />
+        <Gate permission="sessions:manage"><SessionsContent /></Gate>
       </Suspense>
     </PageContainer>
   );

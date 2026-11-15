@@ -3,7 +3,7 @@
 import { randomUUID } from "crypto";
 import { revalidatePath } from "next/cache";
 import { prisma } from "@/lib/prisma";
-import { isAdmin, UNAUTHORIZED } from "@/lib/require-admin";
+import { hasPermission, UNAUTHORIZED } from "@/lib/require-admin";
 
 export type QuestionTypeInput = "MULTIPLE_CHOICE" | "TEXT";
 
@@ -19,6 +19,7 @@ export type CreateExamInput = {
   title: string;
   description?: string;
   durationMinutes: number;
+  convocatoriaId: string;
   questions: ManualQuestionInput[];
 };
 
@@ -45,7 +46,7 @@ type PreparedOption = {
 
 /** Crea el examen + preguntas + opciones con createMany en una sola transacción. */
 async function persistExam(
-  meta: { title: string; description?: string; durationMinutes: number },
+  meta: { title: string; description?: string; durationMinutes: number; convocatoriaId: string },
   questions: PreparedQuestion[],
   options: PreparedOption[],
 ): Promise<ActionResult> {
@@ -55,6 +56,7 @@ async function persistExam(
         title: meta.title,
         description: meta.description || null,
         durationMinutes: meta.durationMinutes,
+        convocatoriaId: meta.convocatoriaId,
         status: "DRAFT",
       },
     });
@@ -68,6 +70,14 @@ async function persistExam(
   });
   revalidatePath("/admin/exam-builder");
   return { ok: true, examId: exam.id, questionCount: questions.length };
+}
+
+async function validConvocatoria(id: string | undefined): Promise<string | null> {
+  if (!id) return "Selecciona la convocatoria del examen.";
+  const c = await prisma.convocatoria.findUnique({ where: { id }, select: { status: true } });
+  if (!c) return "La convocatoria no existe.";
+  if (c.status !== "ACTIVE") return "La convocatoria está archivada.";
+  return null;
 }
 
 function validMeta(title: string, durationMinutes: number): string | null {
@@ -90,9 +100,9 @@ function cleanUrl(url?: string): string | null {
 
 /** Creación manual desde el formulario dinámico. */
 export async function createExamManual(input: CreateExamInput): Promise<ActionResult> {
-  if (!(await isAdmin())) return { ok: false, error: UNAUTHORIZED };
+  if (!(await hasPermission("exams:write"))) return { ok: false, error: UNAUTHORIZED };
   try {
-    const metaError = validMeta(input.title, input.durationMinutes);
+    const metaError = validMeta(input.title, input.durationMinutes) ?? (await validConvocatoria(input.convocatoriaId));
     if (metaError) return { ok: false, error: metaError };
     if (!input.questions?.length) return { ok: false, error: "Agrega al menos una pregunta." };
 
@@ -142,12 +152,12 @@ const OPTION_COLUMNS = ["OpcionA", "OpcionB", "OpcionC", "OpcionD"] as const;
  * Opcionales: Puntos, ImagenUrl.
  */
 export async function importExamFromCsv(
-  meta: { title: string; description?: string; durationMinutes: number },
+  meta: { title: string; description?: string; durationMinutes: number; convocatoriaId: string },
   rows: CsvRow[],
 ): Promise<ActionResult> {
-  if (!(await isAdmin())) return { ok: false, error: UNAUTHORIZED };
+  if (!(await hasPermission("exams:write"))) return { ok: false, error: UNAUTHORIZED };
   try {
-    const metaError = validMeta(meta.title, meta.durationMinutes);
+    const metaError = validMeta(meta.title, meta.durationMinutes) ?? (await validConvocatoria(meta.convocatoriaId));
     if (metaError) return { ok: false, error: metaError };
     if (!rows?.length) return { ok: false, error: "El CSV no contiene filas." };
     if (rows.length > 1000) return { ok: false, error: "Máximo 1000 preguntas por CSV." };
@@ -205,7 +215,7 @@ export async function importExamFromCsv(
 export async function publishExam(
   examId: string,
 ): Promise<{ ok: true } | { ok: false; error: string }> {
-  if (!(await isAdmin())) return { ok: false, error: UNAUTHORIZED };
+  if (!(await hasPermission("exams:write"))) return { ok: false, error: UNAUTHORIZED };
   try {
     const exam = await prisma.exam.findUnique({
       where: { id: examId },

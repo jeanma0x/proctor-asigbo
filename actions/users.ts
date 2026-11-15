@@ -3,8 +3,9 @@
 import bcrypt from "bcryptjs";
 import { revalidatePath } from "next/cache";
 import { prisma } from "@/lib/prisma";
-import { getAdmin, isAdmin, UNAUTHORIZED } from "@/lib/require-admin";
+import { getAdmin, hasPermission, UNAUTHORIZED } from "@/lib/require-admin";
 import { passwordIssue } from "@/lib/password";
+import { ROLES, type Role } from "@/lib/permissions";
 import type { ActionResult } from "@/actions/account";
 
 const EMAIL_OK = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
@@ -13,49 +14,94 @@ export type AdminRow = {
   id: string;
   name: string | null;
   email: string;
+  role: Role;
+  isActive: boolean;
   createdAt: Date;
   lastLoginAt: Date | null;
   mustChangePassword: boolean;
 };
 
+/** Solo SUPERADMIN. Como quien actúa siempre es un SUPERADMIN activo, nunca puede quedar el sistema sin uno
+ *  mientras las acciones prohíban operar sobre uno mismo (se valida en cada acción). */
 export async function listAdmins(): Promise<{ me: string; admins: AdminRow[] } | null> {
   const me = await getAdmin();
-  if (!me || me.mustChangePassword) return null;
+  if (!me || me.mustChangePassword || me.role !== "SUPERADMIN") return null;
   const admins = await prisma.adminUser.findMany({
     orderBy: { createdAt: "asc" },
-    select: { id: true, name: true, email: true, createdAt: true, lastLoginAt: true, mustChangePassword: true },
+    select: { id: true, name: true, email: true, role: true, isActive: true, createdAt: true, lastLoginAt: true, mustChangePassword: true },
   });
   return { me: me.id, admins };
 }
 
+const isRole = (r: unknown): r is Role => typeof r === "string" && (ROLES as string[]).includes(r);
+
 /** Crea un administrador con contraseña temporal: deberá cambiarla en su primer ingreso. */
-export async function createAdmin(input: { name: string; email: string; password: string }): Promise<ActionResult> {
-  if (!(await isAdmin())) return { ok: false, error: UNAUTHORIZED };
+export async function createAdmin(input: { name: string; email: string; password: string; role: Role }): Promise<ActionResult> {
+  if (!(await hasPermission("users:manage"))) return { ok: false, error: UNAUTHORIZED };
   const email = input.email?.trim().toLowerCase();
   const name = input.name?.trim().replace(/\s+/g, " ").slice(0, 80) || null;
   if (!email || !EMAIL_OK.test(email) || email.length > 254) return { ok: false, error: "Correo inválido." };
+  if (!isRole(input.role)) return { ok: false, error: "Rol inválido." };
   const issue = passwordIssue(input.password ?? "");
   if (issue) return { ok: false, error: issue };
 
   try {
     if (await prisma.adminUser.findUnique({ where: { email }, select: { id: true } }))
-      return { ok: false, error: "Ya existe un administrador con ese correo." };
+      return { ok: false, error: "Ya existe un usuario con ese correo." };
     await prisma.adminUser.create({
-      data: { email, name, passwordHash: await bcrypt.hash(input.password, 12), mustChangePassword: true },
+      data: { email, name, role: input.role, passwordHash: await bcrypt.hash(input.password, 12), mustChangePassword: true },
     });
     revalidatePath("/admin/users");
     return { ok: true };
   } catch (e) {
     console.error(e);
-    return { ok: false, error: "No se pudo crear el administrador." };
+    return { ok: false, error: "No se pudo crear el usuario." };
   }
 }
 
-/** Restablece la contraseña de OTRO administrador (queda temporal y se cierran sus sesiones). */
-export async function resetAdminPassword(id: string, password: string): Promise<ActionResult> {
+async function guardTarget(id: string): Promise<{ ok: true; meId: string } | { ok: false; error: string }> {
+  if (!(await hasPermission("users:manage"))) return { ok: false, error: UNAUTHORIZED };
   const me = await getAdmin();
-  if (!me || me.mustChangePassword) return { ok: false, error: UNAUTHORIZED };
-  if (id === me.id) return { ok: false, error: "Para cambiar tu contraseña usa «Mi cuenta»." };
+  if (!me) return { ok: false, error: UNAUTHORIZED };
+  if (id === me.id) return { ok: false, error: "No puedes realizar esta acción sobre tu propio usuario." };
+  return { ok: true, meId: me.id };
+}
+
+export async function setAdminRole(id: string, role: Role): Promise<ActionResult> {
+  const g = await guardTarget(id);
+  if (!g.ok) return g;
+  if (!isRole(role)) return { ok: false, error: "Rol inválido." };
+  try {
+    await prisma.adminUser.update({ where: { id }, data: { role } });
+    revalidatePath("/admin/users");
+    return { ok: true };
+  } catch (e) {
+    console.error(e);
+    return { ok: false, error: "No se pudo cambiar el rol." };
+  }
+}
+
+/** Desactiva/reactiva el acceso sin borrar al usuario. Al desactivar se cierran sus sesiones. */
+export async function setAdminActive(id: string, active: boolean): Promise<ActionResult> {
+  const g = await guardTarget(id);
+  if (!g.ok) return g;
+  try {
+    await prisma.adminUser.update({
+      where: { id },
+      data: active ? { isActive: true } : { isActive: false, tokenVersion: { increment: 1 } },
+    });
+    revalidatePath("/admin/users");
+    return { ok: true };
+  } catch (e) {
+    console.error(e);
+    return { ok: false, error: "No se pudo actualizar el acceso." };
+  }
+}
+
+/** Restablece la contraseña de OTRO usuario (queda temporal y se cierran sus sesiones). */
+export async function resetAdminPassword(id: string, password: string): Promise<ActionResult> {
+  const g = await guardTarget(id);
+  if (!g.ok) return g;
   const issue = passwordIssue(password ?? "");
   if (issue) return { ok: false, error: issue };
   try {
@@ -72,16 +118,14 @@ export async function resetAdminPassword(id: string, password: string): Promise<
 }
 
 export async function deleteAdmin(id: string): Promise<ActionResult> {
-  const me = await getAdmin();
-  if (!me || me.mustChangePassword) return { ok: false, error: UNAUTHORIZED };
-  if (id === me.id) return { ok: false, error: "No puedes eliminar tu propio usuario." };
+  const g = await guardTarget(id);
+  if (!g.ok) return g;
   try {
-    if ((await prisma.adminUser.count()) <= 1) return { ok: false, error: "Debe quedar al menos un administrador." };
     await prisma.adminUser.delete({ where: { id } });
     revalidatePath("/admin/users");
     return { ok: true };
   } catch (e) {
     console.error(e);
-    return { ok: false, error: "No se pudo eliminar el administrador." };
+    return { ok: false, error: "No se pudo eliminar el usuario." };
   }
 }

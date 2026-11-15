@@ -36,7 +36,7 @@ export const authOptions: NextAuthOptions = {
 
         const admin = await prisma.adminUser.findUnique({ where: { email } });
         const valid = await bcrypt.compare(password, admin?.passwordHash ?? DUMMY_HASH);
-        if (!admin || !valid) {
+        if (!admin || !valid || !admin.isActive) {
           await recordFailure(email, ip);
           return null;
         }

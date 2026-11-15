@@ -59,11 +59,14 @@ const initialQuestion = (): QuestionDraft => ({
 const inputCls =
   "w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm shadow-sm outline-none transition focus:border-blue-500 focus:ring-2 focus:ring-blue-200";
 
-export default function ExamBuilder() {
+export type ConvocatoriaOption = { id: string; name: string; year: number };
+
+export default function ExamBuilder({ convocatorias }: { convocatorias: ConvocatoriaOption[] }) {
   const [mode, setMode] = useState<"manual" | "csv">("manual");
   const [title, setTitle] = useState("");
   const [description, setDescription] = useState("");
   const [duration, setDuration] = useState(60);
+  const [convocatoriaId, setConvocatoriaId] = useState(convocatorias[0]?.id ?? "");
   const [questions, setQuestions] = useState<QuestionDraft[]>(() => [initialQuestion()]);
   const [csvRows, setCsvRows] = useState<CsvRow[]>([]);
   const [csvName, setCsvName] = useState("");
@@ -124,6 +127,7 @@ export default function ExamBuilder() {
         title,
         description,
         durationMinutes: duration,
+        convocatoriaId,
         questions: questions.map((q) => ({
           text: q.text,
           type: q.type,
@@ -144,7 +148,7 @@ export default function ExamBuilder() {
   const submitCsv = () => {
     setResult(null);
     startTransition(async () => {
-      const res = await importExamFromCsv({ title, description, durationMinutes: duration }, csvRows);
+      const res = await importExamFromCsv({ title, description, durationMinutes: duration, convocatoriaId }, csvRows);
       setResult(res);
       if (res.ok) {
         setCsvRows([]);
@@ -178,6 +182,14 @@ export default function ExamBuilder() {
               value={duration}
               onChange={(e) => setDuration(Number(e.target.value))}
             />
+          </label>
+          <label className="sm:col-span-3">
+            <span className="mb-1 block text-sm font-medium">Convocatoria</span>
+            <select className={inputCls} value={convocatoriaId} onChange={(e) => setConvocatoriaId(e.target.value)}>
+              {convocatorias.length === 0 && <option value="">Crea primero una convocatoria</option>}
+              {convocatorias.map((c) => <option key={c.id} value={c.id}>{c.name} ({c.year})</option>)}
+            </select>
+            <span className="mt-1 block text-xs text-slate-500">El examen y sus resultados quedan archivados bajo esta convocatoria.</span>
           </label>
           <label className="sm:col-span-3">
             <span className="mb-1 block text-sm font-medium">Descripción (opcional)</span>
@@ -346,7 +358,7 @@ export default function ExamBuilder() {
             <button
               type="button"
               onClick={submitManual}
-              disabled={pending}
+              disabled={pending || !convocatoriaId}
               className="rounded-xl bg-asigbo-blue px-6 py-2.5 text-sm font-semibold text-white shadow transition-colors hover:bg-asigbo-blue-dark disabled:opacity-50"
             >
               {pending ? "Guardando…" : "Guardar examen"}
@@ -410,7 +422,7 @@ export default function ExamBuilder() {
             <button
               type="button"
               onClick={submitCsv}
-              disabled={pending || csvRows.length === 0}
+              disabled={pending || csvRows.length === 0 || !convocatoriaId}
               className="rounded-xl bg-asigbo-blue px-6 py-2.5 text-sm font-semibold text-white shadow transition-colors hover:bg-asigbo-blue-dark disabled:opacity-50"
             >
               {pending ? "Importando…" : "Crear examen desde CSV"}

@@ -1,7 +1,7 @@
 "use server";
 
 import { prisma } from "@/lib/prisma";
-import { isAdmin, UNAUTHORIZED } from "@/lib/require-admin";
+import { hasPermission, UNAUTHORIZED } from "@/lib/require-admin";
 
 /** Cuántos eventos recientes se traen por sesión en curso. */
 const RECENT_LOGS = 5;
@@ -14,7 +14,7 @@ const examSel = { select: { id: true, title: true, durationMinutes: true } } as 
  * (con sus últimos eventos) y las demás (sin iniciar / finalizadas) para las otras pestañas.
  */
 export async function getLiveOverview() {
-  if (!(await isAdmin())) throw new Error("No autorizado");
+  if (!(await hasPermission("live:view"))) throw new Error("No autorizado");
   const [active, others] = await Promise.all([
     prisma.candidateSession.findMany({
       where: { status: "IN_PROGRESS" },
@@ -39,7 +39,7 @@ export type LiveSession = Awaited<ReturnType<typeof getLiveOverview>>[number];
 
 /** Historial completo de eventos de una sesión (para el panel expandible). */
 export async function getSessionLogs(sessionId: string) {
-  if (!(await isAdmin())) throw new Error("No autorizado");
+  if (!(await hasPermission("live:view"))) throw new Error("No autorizado");
   return prisma.auditLog.findMany({
     where: { sessionId },
     orderBy: { createdAt: "desc" },
@@ -50,7 +50,7 @@ export async function getSessionLogs(sessionId: string) {
 
 /** Cierra manualmente una sesión en curso (por decisión de la Junta). */
 export async function terminateSession(sessionId: string): Promise<{ ok: true } | { ok: false; error: string }> {
-  if (!(await isAdmin())) return { ok: false, error: UNAUTHORIZED };
+  if (!(await hasPermission("live:terminate"))) return { ok: false, error: UNAUTHORIZED };
   try {
     const res = await prisma.candidateSession.updateMany({
       where: { id: sessionId, status: "IN_PROGRESS" },

@@ -51,7 +51,33 @@ enum AuditSeverity {
   CRITICAL
 }
 
+enum AdminRole {
+  SUPERADMIN // todo, incluida la gestión de administradores
+  ADMIN // opera exámenes, accesos, monitoreo, resultados y convocatorias
+  REVIEWER // solo lectura: dashboard, monitoreo y resultados
+}
+
+enum ConvocatoriaStatus {
+  ACTIVE
+  ARCHIVED
+}
+
 // ───────────── Models ─────────────
+
+/// Convocatoria anual de becas (p. ej. «Convocatoria 2027»). Agrupa exámenes y conserva el histórico por año.
+model Convocatoria {
+  id          String             @id @default(cuid())
+  name        String
+  year        Int
+  description String?
+  status      ConvocatoriaStatus @default(ACTIVE)
+  createdAt   DateTime           @default(now())
+  updatedAt   DateTime           @updatedAt
+
+  exams Exam[]
+
+  @@index([year])
+}
 
 model Candidate {
   id        String   @id @default(cuid())
@@ -74,11 +100,16 @@ model Exam {
   status          ExamStatus @default(DRAFT)
   opensAt         DateTime?
   closesAt        DateTime?
+  convocatoriaId  String?
   createdAt       DateTime   @default(now())
   updatedAt       DateTime   @updatedAt
 
-  questions Question[]
-  sessions  CandidateSession[]
+  /// Restrict: no se puede borrar una convocatoria con exámenes (el histórico persiste)
+  convocatoria Convocatoria? @relation(fields: [convocatoriaId], references: [id], onDelete: Restrict)
+  questions    Question[]
+  sessions     CandidateSession[]
+
+  @@index([convocatoriaId])
 }
 
 model Question {
@@ -128,7 +159,8 @@ model CandidateSession {
   updatedAt   DateTime      @updatedAt
 
   candidate Candidate  @relation(fields: [candidateId], references: [id], onDelete: Cascade)
-  exam      Exam       @relation(fields: [examId], references: [id], onDelete: Cascade)
+  /// Restrict: un examen con sesiones no se puede borrar (conserva resultados históricos)
+  exam      Exam       @relation(fields: [examId], references: [id], onDelete: Restrict)
   answers   Answer[]
   auditLogs AuditLog[]
 
@@ -172,6 +204,9 @@ model AdminUser {
   email              String    @unique
   name               String?
   passwordHash       String
+  role               AdminRole @default(ADMIN)
+  /// false = acceso desactivado (no puede ingresar; se conserva el usuario)
+  isActive           Boolean   @default(true)
   /// Se incrementa al cambiar/restablecer la contraseña o cerrar sesiones: invalida los JWT emitidos antes.
   tokenVersion       Int       @default(0)
   /// true cuando la contraseña es temporal (usuario nuevo o restablecida por otro admin).

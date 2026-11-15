@@ -1,5 +1,7 @@
+import { Suspense } from "react";
 import type { Metadata } from "next";
 import { MonitorPlay } from "lucide-react";
+import Gate from "@/components/admin/Gate";
 import LiveDashboard from "@/components/admin/LiveDashboard";
 import { PageContainer, PageHeader } from "@/components/admin/ui";
 
@@ -17,7 +19,9 @@ export default function LivePage() {
         title="Monitoreo en vivo"
         description="Supervisa en tiempo real a los aspirantes y actúa ante posibles fraudes."
       />
-      <LiveDashboard />
+      <Suspense fallback={null}>
+        <Gate permission="live:view"><LiveDashboard /></Gate>
+      </Suspense>
     </PageContainer>
   );
 }

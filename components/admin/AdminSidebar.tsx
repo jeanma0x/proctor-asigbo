@@ -5,31 +5,41 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { signOut } from "next-auth/react";
 import {
-  ClipboardList, KeyRound, LogOut, MonitorPlay, ShieldCheck, UserCog, Users, type LucideIcon,
+  CalendarRange, ClipboardCheck, ClipboardList, KeyRound, LayoutDashboard, LogOut, MonitorPlay, ShieldCheck, UserCog, Users,
+  type LucideIcon,
 } from "lucide-react";
 import { initials } from "@/lib/format";
+import { can, ROLE_INFO, type Permission, type Role } from "@/lib/permissions";
 
-type NavItem = { href: string; label: string; icon: LucideIcon };
+type NavItem = { href: string; label: string; icon: LucideIcon; permission?: Permission };
 
 const GROUPS: { title: string; items: NavItem[] }[] = [
+  { title: "Resumen", items: [{ href: "/admin/dashboard", label: "Dashboard", icon: LayoutDashboard, permission: "dashboard:view" }] },
   {
-    title: "Gestión",
+    title: "Operación",
     items: [
-      { href: "/admin/exam-builder", label: "Constructor de Exámenes", icon: ClipboardList },
-      { href: "/admin/sessions", label: "Enlaces de Acceso", icon: KeyRound },
-      { href: "/admin/live", label: "Monitoreo en Vivo", icon: MonitorPlay },
+      { href: "/admin/exam-builder", label: "Constructor de Exámenes", icon: ClipboardList, permission: "exams:write" },
+      { href: "/admin/sessions", label: "Enlaces de Acceso", icon: KeyRound, permission: "sessions:manage" },
+      { href: "/admin/live", label: "Monitoreo en Vivo", icon: MonitorPlay, permission: "live:view" },
+    ],
+  },
+  {
+    title: "Histórico",
+    items: [
+      { href: "/admin/convocatorias", label: "Convocatorias", icon: CalendarRange, permission: "dashboard:view" },
+      { href: "/admin/results", label: "Resultados", icon: ClipboardCheck, permission: "results:view" },
     ],
   },
   {
     title: "Administración",
     items: [
-      { href: "/admin/users", label: "Administradores", icon: Users },
+      { href: "/admin/users", label: "Usuarios y Roles", icon: Users, permission: "users:manage" },
       { href: "/admin/account", label: "Mi cuenta", icon: UserCog },
     ],
   },
 ];
 
-export default function AdminSidebar({ user }: { user: { name: string | null; email: string } | null }) {
+export default function AdminSidebar({ user }: { user: { name: string | null; email: string; role: Role } | null }) {
   const pathname = usePathname();
 
   return (
@@ -45,7 +55,9 @@ export default function AdminSidebar({ user }: { user: { name: string | null; em
       </div>
 
       <nav aria-label="Navegación principal" className="flex gap-1 overflow-x-auto px-3 pb-3 md:flex-1 md:flex-col md:overflow-y-auto md:pb-0 md:pt-2">
-        {GROUPS.map((group, gi) => (
+        {GROUPS.map((g) => ({ ...g, items: g.items.filter((i) => !i.permission || !user || can(user.role, i.permission)) }))
+          .filter((g) => g.items.length > 0)
+          .map((group, gi) => (
           <div key={group.title} className="flex gap-1 md:flex-col">
             <p className={`mb-1 hidden px-3 text-xs font-semibold uppercase tracking-wider text-blue-300/70 md:block ${gi > 0 ? "mt-4" : ""}`}>
               {group.title}
@@ -80,7 +92,7 @@ export default function AdminSidebar({ user }: { user: { name: string | null; em
             </span>
             <div className="min-w-0">
               <p className="truncate text-sm font-semibold text-white">{user.name || user.email.split("@")[0]}</p>
-              <p className="truncate text-xs text-blue-200/80">{user.email}</p>
+              <p className="truncate text-xs text-blue-200/80">{ROLE_INFO[user.role].label} · {user.email}</p>
             </div>
           </div>
         )}

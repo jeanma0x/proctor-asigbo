@@ -2,7 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 import { prisma } from "@/lib/prisma";
-import { isAdmin, UNAUTHORIZED } from "@/lib/require-admin";
+import { hasPermission, UNAUTHORIZED } from "@/lib/require-admin";
 import { appBaseUrl, emailConfigured, sendInvitationEmail } from "@/lib/email";
 import type { CandidateInput } from "@/lib/parse-candidates";
 
@@ -28,7 +28,7 @@ const EMAIL_OK = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
  * Es idempotente: re-ejecutarla con el mismo correo devuelve la sesión existente.
  */
 export async function generateSessions(examId: string, candidates: CandidateInput[]): Promise<GenerateResult> {
-  if (!(await isAdmin())) return { ok: false, error: UNAUTHORIZED };
+  if (!(await hasPermission("sessions:manage"))) return { ok: false, error: UNAUTHORIZED };
   try {
     const exam = await prisma.exam.findUnique({ where: { id: examId }, select: { status: true } });
     if (!exam) return { ok: false, error: "El examen no existe." };
@@ -109,7 +109,7 @@ export type ExamSessionRow = {
 
 /** Todos los aspirantes con acceso a un examen (para la tabla persistente de «Enlaces de acceso»). */
 export async function listExamSessions(examId: string): Promise<ExamSessionRow[]> {
-  if (!(await isAdmin())) return [];
+  if (!(await hasPermission("sessions:manage"))) return [];
   const rows = await prisma.candidateSession.findMany({
     where: { examId },
     orderBy: { createdAt: "desc" },
@@ -144,7 +144,7 @@ const EMAIL_CONCURRENCY = 5;
 
 /** Envía por correo (SMTP) la invitación con el enlace personal a las sesiones indicadas. */
 export async function sendInvitations(examId: string, sessionIds: string[]): Promise<SendResult> {
-  if (!(await isAdmin())) return { ok: false, error: UNAUTHORIZED };
+  if (!(await hasPermission("sessions:manage"))) return { ok: false, error: UNAUTHORIZED };
   if (!emailConfigured())
     return { ok: false, error: "El envío por correo no está configurado (faltan variables SMTP en el servidor)." };
   const ids = [...new Set(sessionIds ?? [])].slice(0, MAX_EMAILS_PER_CALL);

@@ -10,7 +10,7 @@ const inputClass =
 
 /** Solo rutas internas de /admin, para evitar open-redirect. */
 function safeCallback(raw: string | null) {
-  return raw && raw.startsWith("/admin") && !raw.startsWith("//") ? raw : "/admin/exam-builder";
+  return raw && raw.startsWith("/admin") && !raw.startsWith("//") ? raw : "/admin/dashboard";
 }
 
 export default function LoginForm() {
