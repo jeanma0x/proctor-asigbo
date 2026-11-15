@@ -11,7 +11,7 @@ Sistema de evaluación en línea, seguro y con trazabilidad, para el proceso de 
 1. Exámenes por convocatoria: constructor manual o CSV, edición, duplicado, orden aleatorio, ventana de apertura/cierre.
 2. Acceso por enlaces personales: bandeja de aspirantes (pegar desde Excel), envío por correo (SMTP) o WhatsApp, quitar y reiniciar intentos.
 3. Examen seguro: pantalla completa, detección de pérdida de foco, bloqueo de copiar/pegar, 3 advertencias, temporizador del servidor, autoguardado.
-4. Monitoreo en vivo con alertas y cierre manual.
+4. Monitoreo en vivo con alertas en tiempo real, detalle/acta de infracciones para justificar el cierre y cierre manual.
 5. Resultados con respuestas por pregunta, calificación manual de abiertas, perfil de candidato con historial y notas internas.
 6. Ranking transparente (3 métodos, desempates, banderas de revisión) y decisiones persistentes (seleccionado / lista de espera / no seleccionado).
 7. Reportería con membrete ASIGBO: informe PDF individual y grupal, CSV; dashboard con KPIs e histórico por año.

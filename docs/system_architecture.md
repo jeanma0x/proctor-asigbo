@@ -17,7 +17,7 @@ Nota Cache Components: todo lo que lee cookies/sesión/BD en tiempo de petición
 
 ## 2. Mapa de módulos
 **Panel de administración (`/admin/*`, protegido por `proxy.ts` + validación en servidor):**
-Dashboard · Exámenes (lista, editar, duplicar, publicar/cerrar, eliminar) · Constructor (nuevo examen manual o CSV) · Enlaces de acceso (bandeja de aspirantes, correo/WhatsApp, quitar/reiniciar) · Monitoreo en vivo · Convocatorias · Candidatos (directorio y perfil) · Resultados (detalle y calificación manual) · Ranking · Reportes (PDF/CSV) · Usuarios y roles · Bitácora · Mi cuenta.
+Dashboard · Exámenes (lista, editar, duplicar, publicar/cerrar, eliminar) · Constructor (nuevo examen manual o CSV) · Enlaces de acceso (bandeja de aspirantes, correo/WhatsApp, quitar/reiniciar) · Monitoreo en vivo · Convocatorias · Candidatos (directorio y perfil) · Resultados e informes (detalle, calificación manual, PDF/CSV individual y grupal) · Ranking y decisiones · Usuarios y roles · Bitácora · Mi cuenta.
 
 **Zona pública del candidato:** `/` (página informativa) y `/exam/[examId]?session=<id>` (enlace personal).
 
@@ -59,7 +59,7 @@ Dashboard · Exámenes (lista, editar, duplicar, publicar/cerrar, eliminar) · C
 - Las decisiones (seleccionado / lista de espera / no seleccionado) se guardan por sesión con autor y fecha.
 
 ## 7. Monitoreo en vivo
-Polling con SWR cada 4 s (`actions/live.ts`); Vercel serverless no mantiene WebSockets. Alternativa futura: Pusher.
+Polling con SWR cada 3 s (`actions/live.ts`); Vercel serverless no mantiene WebSockets. Alternativa futura: Pusher. Al detectar una infracción nueva el panel la muestra en el feed «Infracciones en vivo», con opción de sonido/notificación del navegador y contador en el título de la pestaña. Al llegar a 3 infracciones aparece un aviso para pedir al candidato que salga de Zoom. El panel «Detalle» da la línea de tiempo con segundos y un **acta** copiable que justifica el cierre (`getSessionDetail`).
 
 ## 8. Variables de entorno
 | Variable | Uso |

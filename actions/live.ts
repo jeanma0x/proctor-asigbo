@@ -16,7 +16,8 @@ const examSel = { select: { id: true, title: true, durationMinutes: true } } as 
  */
 export async function getLiveOverview() {
   if (!(await hasPermission("live:view"))) throw new Error("No autorizado");
-  const [active, others] = await Promise.all([
+  const since = new Date(Date.now() - 6 * 3600_000);
+  const [active, others, recentClosed] = await Promise.all([
     prisma.candidateSession.findMany({
       where: { status: "IN_PROGRESS" },
       orderBy: { startedAt: "asc" },
@@ -32,8 +33,14 @@ export async function getLiveOverview() {
       take: 300,
       include: { candidate: candidateSel, exam: examSel },
     }),
+    // Cerradas por infracciones en las últimas horas: se traen sus eventos para poder alertar y justificar el cierre.
+    prisma.candidateSession.findMany({
+      where: { status: "TERMINATED", exam: { status: "PUBLISHED" }, updatedAt: { gte: since } },
+      select: { id: true, auditLogs: { orderBy: { createdAt: "desc" }, take: 12 } },
+    }),
   ]);
-  return [...active, ...others.map((s) => ({ ...s, auditLogs: [] as typeof active[number]["auditLogs"] }))];
+  const logsById = new Map(recentClosed.map((s) => [s.id, s.auditLogs]));
+  return [...active, ...others.map((s) => ({ ...s, auditLogs: (logsById.get(s.id) ?? []) as typeof active[number]["auditLogs"] }))];
 }
 
 export type LiveSession = Awaited<ReturnType<typeof getLiveOverview>>[number];
@@ -68,4 +75,18 @@ export async function terminateSession(sessionId: string): Promise<{ ok: true } 
     console.error(e);
     return { ok: false, error: "No se pudo cerrar la sesión." };
   }
+}
+
+/** Detalle completo de una sesión para el panel de infracciones y el acta (eventos en orden cronológico). */
+export async function getSessionDetail(sessionId: string) {
+  if (!(await hasPermission("live:view"))) throw new Error("No autorizado");
+  return prisma.candidateSession.findUnique({
+    where: { id: sessionId },
+    select: {
+      status: true, flagCount: true, startedAt: true, submittedAt: true,
+      candidate: { select: { fullName: true, email: true } },
+      exam: { select: { title: true, durationMinutes: true } },
+      auditLogs: { orderBy: { createdAt: "asc" }, take: 300, select: { id: true, type: true, severity: true, details: true, createdAt: true } },
+    },
+  });
 }

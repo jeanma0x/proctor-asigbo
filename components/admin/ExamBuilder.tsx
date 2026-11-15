@@ -1,6 +1,7 @@
 "use client";
 
 import { useRef, useState, useTransition } from "react";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 import Papa from "papaparse";
 import {
@@ -15,7 +16,7 @@ import {
   CheckCircle2,
   AlertCircle,
 } from "lucide-react";
-import { updateExam, type ExamForEdit } from "@/actions/exams-admin";
+import { setExamStatus, updateExam, type ExamForEdit } from "@/actions/exams-admin";
 import { localToIso } from "@/lib/exam-window";
 import {
   createExamManual,
@@ -164,7 +165,18 @@ export default function ExamBuilder({ convocatorias, initial }: { convocatorias:
     });
   };
 
+  const [published, setPublished] = useState(false);
+  const [publishError, setPublishError] = useState<string | null>(null);
+  const publishNow = (examId: string) => {
+    setPublishError(null);
+    startTransition(async () => {
+      const res = await setExamStatus(examId, "PUBLISHED");
+      if (res.ok) setPublished(true); else setPublishError(res.error);
+    });
+  };
+
   const submitManual = () => {
+    setPublished(false);
     setResult(null);
     startTransition(async () => {
       const res = await createExamManual({
@@ -194,6 +206,7 @@ export default function ExamBuilder({ convocatorias, initial }: { convocatorias:
   };
 
   const submitCsv = () => {
+    setPublished(false);
     setResult(null);
     startTransition(async () => {
       const res = await importExamFromCsv({ title, description, durationMinutes: duration, convocatoriaId, shuffleQuestions, shuffleOptions, opensAt: localToIso(opensLocal), closesAt: localToIso(closesLocal) }, csvRows);
@@ -524,11 +537,22 @@ export default function ExamBuilder({ convocatorias, initial }: { convocatorias:
           }`}
         >
           {result.ok ? <CheckCircle2 className="mt-0.5 h-5 w-5" /> : <AlertCircle className="mt-0.5 h-5 w-5" />}
-          <span>
-            {result.ok
-              ? `Examen guardado como borrador con ${result.questionCount} pregunta(s). Publícalo en «Enlaces de Acceso» para habilitar aspirantes.`
-              : result.error}
-          </span>
+          <div>
+            {result.ok ? (
+              <>
+                <p>Examen guardado como borrador con {result.questionCount} pregunta(s).</p>
+                {published ? (
+                  <p className="mt-1 font-medium">Publicado. Ya puedes habilitar aspirantes en «Enlaces de Acceso».</p>
+                ) : (
+                  <div className="mt-2 flex flex-wrap gap-2">
+                    <button type="button" disabled={pending} onClick={() => publishNow(result.examId)} className="cursor-pointer rounded-lg bg-emerald-700 px-3.5 py-1.5 text-sm font-semibold text-white hover:bg-emerald-800 disabled:opacity-50">Publicar ahora</button>
+                    <Link href="/admin/exams" className="rounded-lg border border-emerald-300 px-3.5 py-1.5 text-sm font-medium hover:bg-emerald-100">Ir a Exámenes</Link>
+                  </div>
+                )}
+                {publishError && <p className="mt-1 text-red-700">{publishError}</p>}
+              </>
+            ) : result.error}
+          </div>
         </div>
       )}
     </div>

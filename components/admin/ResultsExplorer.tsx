@@ -4,7 +4,7 @@ import { useState } from "react";
 import Link from "next/link";
 import useSWR from "swr";
 import { useSearchParams } from "next/navigation";
-import { ChevronRight, Download, Loader2, Search } from "lucide-react";
+import { ChevronRight, Download, FileText, Loader2, Search, Trophy } from "lucide-react";
 import { exportResultsCsv, listResults, type ResultFilters } from "@/actions/results";
 import { btnGhost, card, inputCls } from "@/components/admin/ui";
 import { fmtDateTime } from "@/lib/format";
@@ -71,6 +71,13 @@ export default function ResultsExplorer({ canExport }: { canExport: boolean }) {
             </button>
           )}
         </div>
+        {examId && (
+          <div className="mt-3 flex flex-wrap items-center gap-2 border-t border-slate-100 pt-3">
+            <span className="text-xs font-medium text-slate-500">Este examen:</span>
+            <Link href={`/admin/ranking?e=${examId}`} className={`${btnGhost} !px-3 !py-1.5 text-xs`}><Trophy className="h-3.5 w-3.5" aria-hidden="true" /> Ranking y decisiones</Link>
+            {canExport && <a href={`/admin/reports/exam/${examId}/pdf`} className={`${btnGhost} !px-3 !py-1.5 text-xs`}><FileText className="h-3.5 w-3.5" aria-hidden="true" /> Informe grupal PDF</a>}
+          </div>
+        )}
         {exportError && <p role="alert" className="mt-2 text-sm text-red-700">{exportError}</p>}
       </section>
 
@@ -122,7 +129,12 @@ export default function ResultsExplorer({ canExport }: { canExport: boolean }) {
                     </td>
                     <td className="px-4 py-3 tabular-nums">{r.flagCount > 0 ? <span className="font-semibold text-red-700">{r.flagCount}</span> : <span className="text-slate-400">0</span>}</td>
                     <td className="whitespace-nowrap px-4 py-3 text-slate-600">{fmtDateTime(r.submittedAt)}</td>
-                    <td className="px-4 py-3 text-right">
+                    <td className="whitespace-nowrap px-4 py-3 text-right">
+                      {canExport && r.status !== "NOT_STARTED" && (
+                        <a href={`/admin/reports/candidate/${r.id}/pdf`} aria-label={`Informe PDF de ${r.name}`} title="Informe PDF" className="inline-flex rounded-lg p-1.5 text-slate-500 hover:bg-slate-100">
+                          <FileText className="h-4 w-4" aria-hidden="true" />
+                        </a>
+                      )}
                       <Link href={`/admin/results/${r.id}`} aria-label={`Ver detalle de ${r.name}`} className="inline-flex rounded-lg p-1.5 text-slate-500 hover:bg-slate-100">
                         <ChevronRight className="h-4 w-4" aria-hidden="true" />
                       </Link>
