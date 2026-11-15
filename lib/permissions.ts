@@ -6,6 +6,8 @@ export type Permission =
   | "results:view"
   | "ranking:view"
   | "ranking:decide"
+  | "results:grade"
+  | "candidates:edit"
   | "results:export"
   | "live:view"
   | "live:terminate"
@@ -15,7 +17,7 @@ export type Permission =
   | "users:manage";
 
 const ALL: Permission[] = [
-  "dashboard:view", "results:view", "results:export", "ranking:view", "ranking:decide", "live:view", "live:terminate",
+  "dashboard:view", "results:view", "results:export", "ranking:view", "ranking:decide", "results:grade", "candidates:edit", "live:view", "live:terminate",
   "exams:write", "sessions:manage", "convocatorias:manage", "users:manage",
 ];
 

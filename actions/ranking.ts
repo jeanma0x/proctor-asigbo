@@ -53,10 +53,22 @@ export async function loadRanking(examId: string, method: RankMethod) {
     select: {
       id: true, status: true, flagCount: true, startedAt: true, submittedAt: true, decision: true,
       candidate: { select: { fullName: true, email: true } },
-      answers: { select: { questionId: true, selectedOptionId: true } },
+      answers: { select: { questionId: true, selectedOptionId: true, textResponse: true, manualScore: true } },
     },
   });
   const correctOpt = new Map(exam.questions.flatMap((q) => q.options.filter((o) => o.isCorrect).map((o) => [q.id, o.id] as const)));
+  const qById = new Map(exam.questions.map((q) => [q.id, q]));
+  const creditOf = (s: (typeof sessions)[number]) => {
+    const byQ = new Map(s.answers.map((a) => [a.questionId, a]));
+    const out: Record<string, number | undefined> = {};
+    for (const q of exam.questions) {
+      const a = byQ.get(q.id);
+      if (q.type === "MULTIPLE_CHOICE") out[q.id] = a?.selectedOptionId && correctOpt.get(q.id) === a.selectedOptionId ? 1 : 0;
+      else if (!a?.textResponse?.trim()) out[q.id] = 0; // sin respuesta: nada que calificar
+      else out[q.id] = a.manualScore != null ? Math.min(1, Math.max(0, a.manualScore / (qById.get(q.id)?.points || 1))) : undefined;
+    }
+    return out;
+  };
   const inputs: RankInput[] = sessions.map((s) => ({
     sessionId: s.id,
     name: s.candidate.fullName,
@@ -66,7 +78,7 @@ export async function loadRanking(examId: string, method: RankMethod) {
     startedAt: s.startedAt,
     submittedAt: s.submittedAt,
     decision: s.decision,
-    correct: Object.fromEntries(s.answers.map((a) => [a.questionId, !!a.selectedOptionId && correctOpt.get(a.questionId) === a.selectedOptionId])),
+    credit: creditOf(s),
   }));
   const result = computeRanking(inputs, exam.questions.map((q) => ({ id: q.id, text: q.text, points: q.points, type: q.type })), exam.durationMinutes, method);
   return { exam: { id: exam.id, title: exam.title, durationMinutes: exam.durationMinutes, convocatoria: exam.convocatoria }, result };

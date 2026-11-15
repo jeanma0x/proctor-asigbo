@@ -95,6 +95,21 @@ model Candidate {
   updatedAt DateTime @updatedAt
 
   sessions CandidateSession[]
+  notes    CandidateNote[]
+}
+
+/// Notas internas de la Junta sobre un candidato (histórico entre convocatorias)
+model CandidateNote {
+  id          String   @id @default(cuid())
+  candidateId String
+  authorId    String?
+  authorName  String
+  body        String
+  createdAt   DateTime @default(now())
+
+  candidate Candidate @relation(fields: [candidateId], references: [id], onDelete: Cascade)
+
+  @@index([candidateId, createdAt])
 }
 
 model Exam {
@@ -188,6 +203,9 @@ model Answer {
   questionId       String
   selectedOptionId String?
   textResponse     String?
+  /// Calificación manual (preguntas abiertas): 0..puntos de la pregunta. null = pendiente.
+  manualScore      Float?
+  gradedAt         DateTime?
   answeredAt       DateTime @default(now())
 
   session        CandidateSession @relation(fields: [sessionId], references: [id], onDelete: Cascade)

@@ -115,6 +115,9 @@ export async function getDashboard(requestedId?: string) {
   const topExam = [...submittedByExam.entries()].sort((a, b) => b[1] - a[1])[0]?.[0];
   const ranking = topExam ? await loadRanking(topExam, "integrity") : null;
   const toReview = ranking ? ranking.result.rows.filter((r) => r.reviewReasons.length).length : 0;
+  const pendingGrade = await prisma.answer.count({
+    where: { manualScore: null, textResponse: { not: "" }, question: { type: "TEXT" }, session: { status: "SUBMITTED", exam: { convocatoriaId: selected.id } } },
+  });
 
   const decisions = {
     selected: mine.filter((s) => s.decision === "SELECTED").length,
@@ -140,6 +143,7 @@ export async function getDashboard(requestedId?: string) {
       topExam: ranking ? { id: ranking.exam.id, title: ranking.exam.title } : null,
       top: ranking ? ranking.result.rows.slice(0, 5).map((r) => ({ sessionId: r.sessionId, name: r.name, index: r.index, flagCount: r.flagCount })) : [],
       toReview,
+      pendingGrade,
       decisions,
     },
   };

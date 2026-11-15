@@ -189,7 +189,7 @@ export type CandidateReportData = {
   decision: keyof typeof DECISION_ES | null;
   position: { rank: number; of: number; percentile: number; index: number; method: RankMethod } | null;
   questions: {
-    number: number; text: string; type: "MULTIPLE_CHOICE" | "TEXT"; points: number; earned: number; answered: boolean; correct: boolean | null;
+    number: number; text: string; type: "MULTIPLE_CHOICE" | "TEXT"; points: number; earned: number; answered: boolean; correct: boolean | null; graded?: boolean;
     textResponse: string | null; options: { text: string; isCorrect: boolean; selected: boolean }[];
   }[];
   hasOpenQuestions: boolean;
@@ -229,7 +229,7 @@ export async function buildCandidateReport(d: CandidateReportData, generatedBy: 
     doc.fillColor(C.ink).font("Helvetica-Bold").fontSize(9.5).text(safe(v), PAGE.m + 160, y, { width: CONTENT_W - 160, lineBreak: false });
   });
   doc.y = fy + rows.length * 20 + 6;
-  if (d.hasOpenQuestions) note(doc, "Este examen incluye preguntas abiertas: el puntaje automático solo suma las de opción múltiple. Las respuestas abiertas se muestran para su revisión manual.");
+  if (d.questions.some((q) => q.type === "TEXT" && q.answered && !q.graded)) note(doc, "Hay respuestas abiertas pendientes de calificación: el puntaje todavía no las incluye.");
 
   h2(doc, "Respuestas por pregunta");
   for (const q of d.questions) {
@@ -242,7 +242,7 @@ export async function buildCandidateReport(d: CandidateReportData, generatedBy: 
     doc.fillColor("#ffffff").font("Helvetica-Bold").fontSize(9.5).text(String(q.number), PAGE.m, y0 + 5, { width: 24, align: "center", lineBreak: false });
     doc.fillColor(C.ink).font("Helvetica-Bold").fontSize(10.5).text(safe(q.text), PAGE.m + 34, y0 + 2, { width: CONTENT_W - 130 });
     const tag =
-      q.type === "TEXT" ? { t: "Abierta", fg: C.muted, bg: C.line }
+      q.type === "TEXT" ? (q.answered && q.graded ? { t: `Calificada ${q.earned} / ${q.points}`, fg: C.ok, bg: C.okBg } : q.answered ? { t: "Pendiente de calificar", fg: C.warn, bg: C.warnBg } : { t: "Sin responder", fg: C.muted, bg: C.line })
       : !q.answered ? { t: "Sin responder", fg: C.muted, bg: C.line }
       : q.correct ? { t: `Correcta +${q.earned}`, fg: C.ok, bg: C.okBg }
       : { t: "Incorrecta", fg: C.bad, bg: C.badBg };
@@ -378,7 +378,7 @@ export async function buildExamReport(d: ExamReportData, generatedBy: string): P
     d.method !== "raw" ? (r.difficultyReliable ? "El peso de cada pregunta es 1 + (1 - p), donde p es la proporción de candidatos que la acertó (entre 1 y 2)." : "Con menos de 5 entregas la dificultad no es confiable: todas las preguntas pesan igual.") : "",
     d.method === "integrity" ? `Se restan ${STRIKE_PENALTY} puntos del índice por cada infracción de seguridad registrada (mínimo 0).` : "",
     "Desempates: menos infracciones, menor tiempo utilizado y entrega más temprana. Solo se clasifican exámenes entregados.",
-    r.hasOpenQuestions ? "Las preguntas abiertas no se califican automáticamente y no forman parte del índice." : "",
+    r.pendingOpen > 0 ? `${r.pendingOpen} pregunta(s) abierta(s) tienen respuestas sin calificar y no forman parte del índice.` : r.hasOpenQuestions ? "Las preguntas abiertas se calificaron manualmente y forman parte del índice." : "",
   ].filter(Boolean);
   doc.fillColor(C.muted).font("Helvetica").fontSize(9).text(lines.map((l) => `•  ${safe(l)}`).join("\n"), { width: CONTENT_W, lineGap: 3 });
 

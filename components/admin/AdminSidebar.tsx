@@ -5,7 +5,7 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { signOut } from "next-auth/react";
 import {
-  CalendarRange, ClipboardCheck, ClipboardList, KeyRound, FileBarChart, LayoutDashboard, LogOut, MonitorPlay, ShieldCheck, Trophy, UserCog, Users,
+  CalendarRange, ClipboardCheck, Contact, ClipboardList, KeyRound, FileBarChart, LayoutDashboard, LogOut, MonitorPlay, ShieldCheck, Trophy, UserCog, Users,
   type LucideIcon,
 } from "lucide-react";
 import { initials } from "@/lib/format";
@@ -27,6 +27,7 @@ const GROUPS: { title: string; items: NavItem[] }[] = [
     title: "Histórico",
     items: [
       { href: "/admin/convocatorias", label: "Convocatorias", icon: CalendarRange, permission: "dashboard:view" },
+      { href: "/admin/candidates", label: "Candidatos", icon: Contact, permission: "results:view" },
       { href: "/admin/results", label: "Resultados", icon: ClipboardCheck, permission: "results:view" },
       { href: "/admin/ranking", label: "Ranking", icon: Trophy, permission: "ranking:view" },
       { href: "/admin/reports", label: "Reportes", icon: FileBarChart, permission: "results:export" },

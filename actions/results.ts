@@ -116,6 +116,9 @@ export type QuestionResult = {
   earned: number;
   answered: boolean;
   correct: boolean | null; // null = no calificable automáticamente
+  /** Preguntas abiertas: nota manual (null = pendiente) */
+  manualScore: number | null;
+  graded: boolean;
   textResponse: string | null;
   options: { id: string; text: string; isCorrect: boolean; selected: boolean }[];
 };
@@ -126,7 +129,7 @@ export async function getResultDetail(sessionId: string) {
   const s = await prisma.candidateSession.findUnique({
     where: { id: sessionId },
     include: {
-      candidate: { select: { fullName: true, email: true, studentId: true } },
+      candidate: { select: { id: true, fullName: true, email: true, studentId: true } },
       exam: {
         select: {
           id: true, title: true, durationMinutes: true,
@@ -137,7 +140,7 @@ export async function getResultDetail(sessionId: string) {
           },
         },
       },
-      answers: { select: { questionId: true, selectedOptionId: true, textResponse: true } },
+      answers: { select: { questionId: true, selectedOptionId: true, textResponse: true, manualScore: true } },
       auditLogs: { orderBy: { createdAt: "asc" }, select: { id: true, type: true, severity: true, details: true, createdAt: true } },
     },
   });
@@ -151,9 +154,11 @@ export async function getResultDetail(sessionId: string) {
     const correct = isMc ? (chosen ? !!q.options.find((o) => o.id === chosen)?.isCorrect : false) : null;
     return {
       id: q.id, number: i + 1, text: q.text, type: q.type, imageUrl: q.imageUrl, points: q.points,
-      earned: correct ? q.points : 0,
+      earned: isMc ? (correct ? q.points : 0) : (a?.manualScore ?? 0),
       answered: isMc ? !!chosen : !!a?.textResponse?.trim(),
       correct,
+      manualScore: isMc ? null : (a?.manualScore ?? null),
+      graded: isMc ? true : a?.manualScore != null || !a?.textResponse?.trim(),
       textResponse: a?.textResponse ?? null,
       options: q.options.map((o) => ({ id: o.id, text: o.text, isCorrect: o.isCorrect, selected: o.id === chosen })),
     };
@@ -171,6 +176,8 @@ export async function getResultDetail(sessionId: string) {
     exam: { id: s.exam.id, title: s.exam.title, durationMinutes: s.exam.durationMinutes, convocatoria: s.exam.convocatoria },
     questions,
     hasOpenQuestions: questions.some((q) => q.type === "TEXT"),
+    pendingGrade: questions.filter((q) => q.type === "TEXT" && q.answered && !q.graded).length,
+    decision: s.decision,
     auditLogs: s.auditLogs,
   };
 }

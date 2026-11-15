@@ -78,8 +78,8 @@ export default function RankingView({ exams, canDecide, canExport, initialExamId
       {r && !r.difficultyReliable && method !== "raw" && (
         <p className="flex items-start gap-2 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900"><Info className="mt-0.5 h-4 w-4 shrink-0" aria-hidden="true" /> Hay menos de 5 entregas: la dificultad de cada pregunta aún no es confiable, así que todas pesan igual (equivale al puntaje bruto).</p>
       )}
-      {r?.hasOpenQuestions && (
-        <p className="flex items-start gap-2 rounded-xl border border-slate-200 bg-white px-4 py-3 text-sm text-slate-700"><Info className="mt-0.5 h-4 w-4 shrink-0" aria-hidden="true" /> Este examen tiene preguntas abiertas: no se califican automáticamente y no entran al índice.</p>
+      {r && r.pendingOpen > 0 && (
+        <p className="flex items-start gap-2 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900"><Info className="mt-0.5 h-4 w-4 shrink-0" aria-hidden="true" /> {r.pendingOpen} pregunta(s) abierta(s) tienen respuestas sin calificar y todavía no entran al índice. Califícalas en el detalle de cada resultado y el ranking se actualizará solo.</p>
       )}
       {error && <div role="alert" className="flex items-start gap-2 rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-800"><AlertCircle className="mt-0.5 h-4 w-4 shrink-0" aria-hidden="true" /> {error}</div>}
 

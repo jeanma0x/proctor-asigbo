@@ -10,6 +10,7 @@ import { getResultDetail } from "@/actions/results";
 import { getAdmin } from "@/lib/require-admin";
 import { can } from "@/lib/permissions";
 import { btnPrimary } from "@/components/admin/ui";
+import GradeControl from "@/components/admin/GradeControl";
 import { fmtDateTime } from "@/lib/format";
 import { EVENT_LABEL, STATUS_LABEL } from "@/lib/labels";
 
@@ -20,6 +21,7 @@ async function Detail({ params }: { params: Promise<{ sessionId: string }> }) {
   const [d, admin] = await Promise.all([getResultDetail(sessionId), getAdmin()]);
   if (!d) notFound();
   const canExport = can(admin?.role, "results:export");
+  const canGrade = can(admin?.role, "results:grade");
   const pct = d.score != null && d.maxScore ? Math.round((d.score / d.maxScore) * 100) : null;
   const mins = d.startedAt && d.submittedAt ? Math.max(1, Math.round((d.submittedAt.getTime() - d.startedAt.getTime()) / 60000)) : null;
   const st = STATUS_LABEL[d.status];
@@ -34,7 +36,7 @@ async function Detail({ params }: { params: Promise<{ sessionId: string }> }) {
         <div className="flex flex-wrap items-start justify-between gap-4">
           <div>
             <p className="text-xs font-semibold uppercase tracking-widest text-asigbo-blue">{d.exam.convocatoria?.name ?? "Sin convocatoria"} · {d.exam.title}</p>
-            <h1 className="mt-1 text-2xl font-bold tracking-tight">{d.candidate.fullName}</h1>
+            <h1 className="mt-1 text-2xl font-bold tracking-tight"><Link href={`/admin/candidates/${d.candidate.id}`} className="hover:text-asigbo-blue hover:underline">{d.candidate.fullName}</Link></h1>
             <p className="text-sm text-slate-600">{d.candidate.email}</p>
           </div>
           <div className="flex flex-col items-end gap-3">
@@ -55,9 +57,9 @@ async function Detail({ params }: { params: Promise<{ sessionId: string }> }) {
             </div>
           ))}
         </dl>
-        {d.hasOpenQuestions && (
+        {d.pendingGrade > 0 && (
           <p className="mt-4 rounded-xl border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-900">
-            Este examen incluye preguntas abiertas: el puntaje automático solo suma las de opción múltiple.
+            Hay {d.pendingGrade} respuesta(s) abierta(s) pendientes de calificar: el puntaje y el ranking aún no las incluyen.{canGrade ? " Califícalas más abajo." : ""}
           </p>
         )}
       </header>
@@ -76,7 +78,9 @@ async function Detail({ params }: { params: Promise<{ sessionId: string }> }) {
                   {!q.answered ? "Sin responder" : q.correct ? `Correcta +${q.earned}` : "Incorrecta"}
                 </span>
               ) : (
-                <span className="shrink-0 rounded-full bg-slate-100 px-2.5 py-1 text-xs font-semibold text-slate-700">Abierta</span>
+                <span className={`shrink-0 rounded-full px-2.5 py-1 text-xs font-semibold ${q.graded && q.answered ? "bg-emerald-100 text-emerald-800" : q.answered ? "bg-amber-100 text-amber-900" : "bg-slate-100 text-slate-700"}`}>
+                  {!q.answered ? "Sin responder" : q.graded ? `Calificada ${q.earned} / ${q.points}` : "Pendiente de calificar"}
+                </span>
               )}
             </div>
             {q.type === "MULTIPLE_CHOICE" ? (
@@ -95,6 +99,9 @@ async function Detail({ params }: { params: Promise<{ sessionId: string }> }) {
               <blockquote className="mt-4 whitespace-pre-wrap rounded-xl bg-slate-50 p-4 text-sm text-slate-800">
                 {q.textResponse?.trim() || <span className="text-slate-500">Sin responder</span>}
               </blockquote>
+            )}
+            {q.type === "TEXT" && q.answered && canGrade && (
+              <GradeControl sessionId={d.id} questionId={q.id} points={q.points} current={q.manualScore} />
             )}
           </article>
         ))}

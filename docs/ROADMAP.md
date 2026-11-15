@@ -7,7 +7,6 @@
   español guatemalteco, jerarquía y espaciado más cuidados, pantalla de bienvenida cálida). El panel admin está en mejor estado, pero revisar con el mismo criterio.
 
 ## Brechas funcionales detectadas
-- **Calificación manual de preguntas abiertas**: el puntaje automático solo suma opción múltiple; añadir nota por respuesta y recalcular.
 - **Umbral de aprobación y ranking/preselección** de becarios por convocatoria.
 - **Reabrir sesión** de un candidato por falla técnica (con registro de quién lo autorizó).
 - **Ventana de apertura/cierre del examen** (los campos existen en `Exam.opensAt/closesAt` pero no se aplican).
@@ -25,6 +24,8 @@
 - Informe PDF por candidato y resumen anual de la convocatoria.
 
 ## Hecho
+- Ronda 4: módulo Candidatos (directorio, perfil con historial entre convocatorias, notas internas, corrección de datos), calificación manual de
+  preguntas abiertas con recálculo de puntaje y ranking, correo SMTP (Brevo) activo.
 - Ronda 3: edición/duplicado/cierre/eliminación de exámenes (con bloqueo si ya hay candidatos), orden aleatorio de preguntas y opciones por candidato,
   ranking (bruto / ponderado por dificultad / ponderado + integridad) con decisiones persistentes, reportería PDF/CSV con membrete, dashboard con KPIs y gráficos.
 - Roles (Superadmin / Administrador / Revisor), desactivar acceso, Convocatorias anuales, Resultados con respuestas, Dashboard e histórico por año,

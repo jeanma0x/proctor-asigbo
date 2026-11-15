@@ -10,7 +10,8 @@
  *
  * Desempates (en orden): menos infracciones, menor tiempo utilizado, entrega más temprana.
  * Solo se clasifican las sesiones ENTREGADAS; las cerradas por fraude se listan aparte.
- * Las preguntas abiertas no se califican automáticamente y no entran al índice.
+ * Las preguntas abiertas entran al índice solo cuando TODAS las entregas ya fueron calificadas manualmente en esa pregunta;
+ * mientras haya alguna pendiente, esa pregunta se excluye para no favorecer ni perjudicar a nadie.
  */
 export type RankMethod = "raw" | "difficulty" | "integrity";
 
@@ -38,8 +39,8 @@ export type RankInput = {
   startedAt: Date | null;
   submittedAt: Date | null;
   decision: "SELECTED" | "WAITLIST" | "NOT_SELECTED" | null;
-  /** questionId → acertó (solo preguntas de opción múltiple) */
-  correct: Record<string, boolean>;
+  /** questionId → crédito 0..1 (opción múltiple: 1 acierto / 0 fallo; abierta: nota manual / puntos; undefined = pendiente de calificar) */
+  credit: Record<string, number | undefined>;
 };
 
 export type RankQuestion = { id: string; text: string; points: number; type: "MULTIPLE_CHOICE" | "TEXT" };
@@ -70,6 +71,8 @@ export type RankResult = {
   questions: { id: string; text: string; points: number; pctCorrect: number; weight: number }[];
   difficultyReliable: boolean;
   hasOpenQuestions: boolean;
+  /** Preguntas abiertas con entregas sin calificar (excluidas del índice). */
+  pendingOpen: number;
 };
 
 const round2 = (n: number) => Math.round(n * 100) / 100;
@@ -80,13 +83,16 @@ export function computeRanking(
   durationMinutes: number,
   method: RankMethod,
 ): RankResult {
-  const mc = questions.filter((q) => q.type === "MULTIPLE_CHOICE");
   const submitted = inputs.filter((i) => i.status === "SUBMITTED");
   const n = submitted.length;
   const difficultyReliable = n >= MIN_FOR_DIFFICULTY;
 
+  const open = questions.filter((q) => q.type === "TEXT");
+  const gradedOpen = open.filter((q) => submitted.every((s) => s.credit[q.id] !== undefined));
+  const mc = [...questions.filter((q) => q.type === "MULTIPLE_CHOICE"), ...gradedOpen];
+
   const qStats = mc.map((q) => {
-    const hits = submitted.filter((s) => s.correct[q.id]).length;
+    const hits = submitted.reduce((a, s) => a + (s.credit[q.id] ?? 0), 0);
     const p = n ? hits / n : 0;
     return { id: q.id, text: q.text, points: q.points, pctCorrect: p * 100, weight: difficultyReliable ? 1 + (1 - p) : 1 };
   });
@@ -94,8 +100,8 @@ export function computeRanking(
   const maxWeighted = qStats.reduce((a, q) => a + q.weight * q.points, 0);
 
   const scored = submitted.map((s) => {
-    const raw = mc.reduce((a, q) => a + (s.correct[q.id] ? q.points : 0), 0);
-    const weighted = qStats.reduce((a, q) => a + (s.correct[q.id] ? q.weight * q.points : 0), 0);
+    const raw = mc.reduce((a, q) => a + q.points * (s.credit[q.id] ?? 0), 0);
+    const weighted = qStats.reduce((a, q) => a + q.weight * q.points * (s.credit[q.id] ?? 0), 0);
     const rawPct = maxRaw ? (raw / maxRaw) * 100 : 0;
     const weightedPct = maxWeighted ? (weighted / maxWeighted) * 100 : 0;
     const index =
@@ -144,6 +150,7 @@ export function computeRanking(
     stats: { n, mean: round2(mean), median: round2(median), stdev: round2(stdev), min: sortedAsc[0] ?? 0, max: sortedAsc[n - 1] ?? 0 },
     questions: qStats.map((q) => ({ ...q, pctCorrect: Math.round(q.pctCorrect), weight: round2(q.weight) })),
     difficultyReliable,
-    hasOpenQuestions: questions.some((q) => q.type === "TEXT"),
+    hasOpenQuestions: open.length > 0,
+    pendingOpen: open.length - gradedOpen.length,
   };
 }
