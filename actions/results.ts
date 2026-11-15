@@ -2,6 +2,7 @@
 
 import { prisma } from "@/lib/prisma";
 import { hasPermission } from "@/lib/require-admin";
+import { logAction } from "@/lib/audit";
 
 export type ResultFilters = {
   convocatoriaId?: string;
@@ -94,6 +95,7 @@ const STATUS_ES = { NOT_STARTED: "Sin iniciar", IN_PROGRESS: "En examen", SUBMIT
 export async function exportResultsCsv(filters: ResultFilters): Promise<{ ok: true; csv: string; filename: string } | { ok: false; error: string }> {
   if (!(await hasPermission("results:export"))) return { ok: false, error: "Tu rol no puede exportar resultados." };
   const rows = await fetchRows(filters);
+  await logAction({ action: "export.csv_results", entityType: "export", summary: `Exportó resultados en CSV (${rows.length} registro(s))` });
   const head = ["Convocatoria", "Examen", "Nombre", "Correo", "Estado", "Puntaje", "Puntaje máximo", "Porcentaje", "Infracciones", "Inicio", "Entrega", "Duración (min)"];
   const lines = rows.map((r) => {
     const mins = r.startedAt && r.submittedAt ? Math.round((r.submittedAt.getTime() - r.startedAt.getTime()) / 60000) : "";
@@ -118,6 +120,7 @@ export type QuestionResult = {
   correct: boolean | null; // null = no calificable automáticamente
   /** Preguntas abiertas: nota manual (null = pendiente) */
   manualScore: number | null;
+  gradedBy: string | null;
   graded: boolean;
   textResponse: string | null;
   options: { id: string; text: string; isCorrect: boolean; selected: boolean }[];
@@ -140,7 +143,7 @@ export async function getResultDetail(sessionId: string) {
           },
         },
       },
-      answers: { select: { questionId: true, selectedOptionId: true, textResponse: true, manualScore: true } },
+      answers: { select: { questionId: true, selectedOptionId: true, textResponse: true, manualScore: true, gradedBy: true } },
       auditLogs: { orderBy: { createdAt: "asc" }, select: { id: true, type: true, severity: true, details: true, createdAt: true } },
     },
   });
@@ -158,6 +161,7 @@ export async function getResultDetail(sessionId: string) {
       answered: isMc ? !!chosen : !!a?.textResponse?.trim(),
       correct,
       manualScore: isMc ? null : (a?.manualScore ?? null),
+      gradedBy: isMc ? null : (a?.gradedBy ?? null),
       graded: isMc ? true : a?.manualScore != null || !a?.textResponse?.trim(),
       textResponse: a?.textResponse ?? null,
       options: q.options.map((o) => ({ id: o.id, text: o.text, isCorrect: o.isCorrect, selected: o.id === chosen })),

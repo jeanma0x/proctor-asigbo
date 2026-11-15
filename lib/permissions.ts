@@ -14,16 +14,17 @@ export type Permission =
   | "exams:write"
   | "sessions:manage"
   | "convocatorias:manage"
-  | "users:manage";
+  | "users:manage"
+  | "audit:view";
 
 const ALL: Permission[] = [
   "dashboard:view", "results:view", "results:export", "ranking:view", "ranking:decide", "results:grade", "candidates:edit", "live:view", "live:terminate",
-  "exams:write", "sessions:manage", "convocatorias:manage", "users:manage",
+  "exams:write", "sessions:manage", "convocatorias:manage", "users:manage", "audit:view",
 ];
 
 const ROLE_PERMISSIONS: Record<Role, ReadonlySet<Permission>> = {
   SUPERADMIN: new Set(ALL),
-  ADMIN: new Set(ALL.filter((p) => p !== "users:manage")),
+  ADMIN: new Set(ALL.filter((p) => p !== "users:manage" && p !== "audit:view")),
   REVIEWER: new Set<Permission>(["dashboard:view", "results:view", "ranking:view", "live:view"]),
 };
 

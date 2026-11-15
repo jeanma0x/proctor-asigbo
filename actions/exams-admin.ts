@@ -3,7 +3,9 @@
 import { revalidatePath } from "next/cache";
 import { prisma } from "@/lib/prisma";
 import { hasPermission, UNAUTHORIZED } from "@/lib/require-admin";
+import { logAction } from "@/lib/audit";
 import { prepareQuestions } from "@/lib/exam-prepare";
+import { isoToLocal, parseWindow } from "@/lib/exam-window";
 import type { ManualQuestionInput } from "@/actions/exam";
 
 type Result = { ok: true } | { ok: false; error: string };
@@ -20,6 +22,8 @@ export type ExamListRow = {
   sessions: number;
   started: number;
   shuffleQuestions: boolean;
+  opensAt: Date | null;
+  closesAt: Date | null;
   createdAt: Date;
 };
 
@@ -42,7 +46,7 @@ export async function listExams(): Promise<ExamListRow[]> {
       questions: e._count.questions, points: points.get(e.id) ?? 0,
       sessions: mine.reduce((n, g) => n + g._count._all, 0),
       started: mine.filter((g) => g.status !== "NOT_STARTED").reduce((n, g) => n + g._count._all, 0),
-      shuffleQuestions: e.shuffleQuestions, createdAt: e.createdAt,
+      shuffleQuestions: e.shuffleQuestions, opensAt: e.opensAt, closesAt: e.closesAt, createdAt: e.createdAt,
     };
   });
 }
@@ -55,6 +59,9 @@ export type ExamForEdit = {
   convocatoriaId: string;
   shuffleQuestions: boolean;
   shuffleOptions: boolean;
+  /** «YYYY-MM-DDTHH:mm» en hora de Guatemala ("" = sin límite) */
+  opensAtLocal: string;
+  closesAtLocal: string;
   status: "DRAFT" | "PUBLISHED" | "CLOSED";
   /** true si ya hay candidatos que iniciaron: las preguntas no se pueden tocar sin falsear el histórico. */
   locked: boolean;
@@ -74,6 +81,7 @@ export async function getExamForEdit(examId: string): Promise<ExamForEdit | null
   return {
     id: e.id, title: e.title, description: e.description ?? "", durationMinutes: e.durationMinutes,
     convocatoriaId: e.convocatoriaId ?? "", shuffleQuestions: e.shuffleQuestions, shuffleOptions: e.shuffleOptions,
+    opensAtLocal: isoToLocal(e.opensAt), closesAtLocal: isoToLocal(e.closesAt),
     status: e.status, locked: e._count.sessions > 0,
     questions: e.questions.map((q) => ({
       text: q.text, type: q.type, points: q.points, imageUrl: q.imageUrl ?? "",
@@ -89,6 +97,9 @@ export type UpdateExamInput = {
   convocatoriaId: string;
   shuffleQuestions: boolean;
   shuffleOptions: boolean;
+  /** ISO UTC; null = sin límite */
+  opensAt?: string | null;
+  closesAt?: string | null;
   /** Solo se aplica si el examen no está bloqueado. */
   questions?: ManualQuestionInput[];
 };
@@ -112,7 +123,12 @@ export async function updateExam(examId: string, input: UpdateExamInput): Promis
       if (!c || c.status !== "ACTIVE") return { ok: false, error: "La convocatoria no existe o está archivada." };
     }
 
+    const w = parseWindow(input.opensAt, input.closesAt);
+    if (!w.ok) return w;
+
     const meta = {
+      opensAt: w.opensAt,
+      closesAt: w.closesAt,
       title: input.title.trim(),
       description: input.description?.trim() || null,
       durationMinutes: Math.floor(input.durationMinutes),
@@ -133,6 +149,7 @@ export async function updateExam(examId: string, input: UpdateExamInput): Promis
         if (prepared.options.length) await tx.option.createMany({ data: prepared.options });
       });
     }
+    await logAction({ action: "exam.update", entityType: "exam", entityId: examId, summary: `Editó el examen «${meta.title}»${locked ? " (solo datos generales: ya tiene candidatos)" : ""}` });
     refresh();
     return { ok: true };
   } catch (e) {
@@ -168,6 +185,7 @@ export async function duplicateExam(examId: string, convocatoriaId?: string): Pr
       },
       select: { id: true },
     });
+    await logAction({ action: "exam.duplicate", entityType: "exam", entityId: created.id, summary: `Duplicó el examen «${src.title}» como borrador` });
     refresh();
     return { ok: true, newId: created.id };
   } catch (e) {
@@ -181,12 +199,13 @@ export async function setExamStatus(examId: string, status: "DRAFT" | "PUBLISHED
   try {
     const exam = await prisma.exam.findUnique({
       where: { id: examId },
-      select: { status: true, _count: { select: { questions: true, sessions: { where: { status: { not: "NOT_STARTED" } } } } } },
+      select: { title: true, status: true, _count: { select: { questions: true, sessions: { where: { status: { not: "NOT_STARTED" } } } } } },
     });
     if (!exam) return { ok: false, error: "El examen no existe." };
     if (status === "PUBLISHED" && exam._count.questions === 0) return { ok: false, error: "El examen no tiene preguntas." };
     if (status === "DRAFT" && exam._count.sessions > 0) return { ok: false, error: "No se puede volver a borrador: ya hay candidatos que lo iniciaron. Ciérralo en su lugar." };
     await prisma.exam.update({ where: { id: examId }, data: { status } });
+    await logAction({ action: "exam.status", entityType: "exam", entityId: examId, summary: `Cambió el estado del examen «${exam.title}» a ${({ DRAFT: "Borrador", PUBLISHED: "Publicado", CLOSED: "Cerrado" } as const)[status]}` });
     refresh();
     return { ok: true };
   } catch (e) {
@@ -201,10 +220,12 @@ export async function deleteExam(examId: string): Promise<Result> {
   try {
     const started = await prisma.candidateSession.count({ where: { examId, status: { not: "NOT_STARTED" } } });
     if (started > 0) return { ok: false, error: "Este examen ya tiene candidatos que lo iniciaron. Para conservar el histórico no se puede eliminar: ciérralo." };
+    const title = (await prisma.exam.findUnique({ where: { id: examId }, select: { title: true } }))?.title ?? "examen";
     await prisma.$transaction([
       prisma.candidateSession.deleteMany({ where: { examId } }), // enlaces creados que nadie usó
       prisma.exam.delete({ where: { id: examId } }),
     ]);
+    await logAction({ action: "exam.delete", entityType: "exam", entityId: examId, summary: `Eliminó el examen «${title}»` });
     refresh();
     return { ok: true };
   } catch (e) {

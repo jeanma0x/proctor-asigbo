@@ -3,6 +3,7 @@ import CredentialsProvider from "next-auth/providers/credentials";
 import bcrypt from "bcryptjs";
 import { prisma } from "@/lib/prisma";
 import { clearFailures, isLockedOut, recordFailure } from "@/lib/rate-limit";
+import { logAction } from "@/lib/audit";
 
 // Hash de relleno: se compara aunque el usuario no exista para igualar tiempos de respuesta
 // y no revelar qué correos están registrados.
@@ -32,7 +33,10 @@ export const authOptions: NextAuthOptions = {
         if (!email || !password || password.length > 200) return null;
 
         const ip = clientIp(req?.headers as Record<string, unknown> | undefined);
-        if (await isLockedOut(email, ip)) throw new Error(LOCKED_ERROR);
+        if (await isLockedOut(email, ip)) {
+          await logAction({ action: "auth.locked", entityType: "user", summary: `Intento de acceso bloqueado temporalmente para ${email} (demasiados fallos)` }, { id: null, email });
+          throw new Error(LOCKED_ERROR);
+        }
 
         const admin = await prisma.adminUser.findUnique({ where: { email } });
         const valid = await bcrypt.compare(password, admin?.passwordHash ?? DUMMY_HASH);
@@ -43,6 +47,7 @@ export const authOptions: NextAuthOptions = {
 
         await clearFailures(email);
         await prisma.adminUser.update({ where: { id: admin.id }, data: { lastLoginAt: new Date() } });
+        await logAction({ action: "auth.login", entityType: "user", entityId: admin.id, summary: "Inició sesión" }, { id: admin.id, email: admin.email, name: admin.name });
         return { id: admin.id, email: admin.email, name: admin.name, tokenVersion: admin.tokenVersion };
       },
     }),

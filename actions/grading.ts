@@ -2,7 +2,8 @@
 
 import { revalidatePath } from "next/cache";
 import { prisma } from "@/lib/prisma";
-import { hasPermission, UNAUTHORIZED } from "@/lib/require-admin";
+import { getAdmin, hasPermission, UNAUTHORIZED } from "@/lib/require-admin";
+import { logAction } from "@/lib/audit";
 
 type Result = { ok: true; score: number } | { ok: false; error: string };
 
@@ -20,11 +21,12 @@ export async function gradeAnswer(sessionId: string, questionId: string, score: 
     if (!q) return { ok: false, error: "La pregunta no es abierta o no pertenece a este examen." };
     if (!Number.isFinite(score) || score < 0 || score > q.points) return { ok: false, error: `La nota debe estar entre 0 y ${q.points}.` };
     const value = Math.round(score * 2) / 2;
+    const admin = await getAdmin();
 
     const total = await prisma.$transaction(async (tx) => {
       const answer = await tx.answer.findUnique({ where: { sessionId_questionId: { sessionId, questionId } }, select: { id: true } });
       if (!answer) throw new Error("NO_ANSWER");
-      await tx.answer.update({ where: { id: answer.id }, data: { manualScore: value, gradedAt: new Date() } });
+      await tx.answer.update({ where: { id: answer.id }, data: { manualScore: value, gradedAt: new Date(), gradedBy: admin?.email ?? null } });
       const answers = await tx.answer.findMany({
         where: { sessionId },
         select: { manualScore: true, question: { select: { type: true, points: true } }, selectedOption: { select: { isCorrect: true } } },
@@ -33,6 +35,8 @@ export async function gradeAnswer(sessionId: string, questionId: string, score: 
       await tx.candidateSession.update({ where: { id: sessionId }, data: { score: sum } });
       return sum;
     });
+    const info = await prisma.candidateSession.findUnique({ where: { id: sessionId }, select: { candidate: { select: { fullName: true } }, exam: { select: { title: true } } } });
+    await logAction({ action: "grade.answer", entityType: "session", entityId: sessionId, summary: `Calificó con ${value} / ${q.points} la respuesta abierta de ${info?.candidate.fullName ?? "un candidato"} en «${info?.exam.title ?? "examen"}»` });
     ["/admin/results", "/admin/ranking", "/admin/dashboard", "/admin/candidates"].forEach((p) => revalidatePath(p));
     return { ok: true, score: total };
   } catch (e) {

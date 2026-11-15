@@ -9,14 +9,16 @@
 ## Brechas funcionales detectadas
 - **Umbral de aprobación y ranking/preselección** de becarios por convocatoria.
 - **Reabrir sesión** de un candidato por falla técnica (con registro de quién lo autorizó).
-- **Ventana de apertura/cierre del examen** (los campos existen en `Exam.opensAt/closesAt` pero no se aplican).
 
 ## Seguridad y gobierno
-- **Bitácora de auditoría de administradores** (quién creó, exportó, cerró un examen, cambió roles).
 - **Doble factor (2FA)** para superadmin.
 - Enlaces de examen con **token aleatorio propio** en lugar del id de sesión.
 - **Datos de menores**: política de retención y consentimiento (candidatos de Tercero Básico); exportación/anonimización por convocatoria.
 - Copias de seguridad periódicas de la base de datos (Neon: branching / PITR).
+
+## Calidad
+- Suite E2E estable (Playwright) en el repositorio contra una base de pruebas aislada (rama de Neon) en lugar de datos QA temporales.
+- Acceso por convocatoria (p. ej. un revisor que solo vea la de este año).
 
 ## Analítica
 - Análisis por pregunta (dificultad, % de acierto, preguntas problemáticas).
@@ -24,6 +26,8 @@
 - Informe PDF por candidato y resumen anual de la convocatoria.
 
 ## Hecho
+- Ronda 5: bitácora de auditoría, autoría de decisiones y calificaciones con historial por candidato, ventana de apertura/cierre del examen,
+  acciones quitar/reiniciar intento, página pública de inicio, documentación técnica actualizada.
 - Ronda 4: módulo Candidatos (directorio, perfil con historial entre convocatorias, notas internas, corrección de datos), calificación manual de
   preguntas abiertas con recálculo de puntaje y ranking, correo SMTP (Brevo) activo.
 - Ronda 3: edición/duplicado/cierre/eliminación de exámenes (con bloqueo si ya hay candidatos), orden aleatorio de preguntas y opciones por candidato,

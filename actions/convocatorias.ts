@@ -3,6 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { prisma } from "@/lib/prisma";
 import { hasPermission, UNAUTHORIZED } from "@/lib/require-admin";
+import { logAction } from "@/lib/audit";
 
 export type ConvocatoriaRow = {
   id: string;
@@ -53,6 +54,7 @@ export async function createConvocatoria(input: { name: string; year: number; de
   if (!Number.isFinite(year) || year < 2000 || year > 2100) return { ok: false, error: "El año no es válido." };
   try {
     await prisma.convocatoria.create({ data: { name, year, description: input.description?.trim().slice(0, 500) || null } });
+    await logAction({ action: "convocatoria.create", entityType: "convocatoria", summary: `Creó la convocatoria «${name}» (${year})` });
     revalidatePath("/admin/convocatorias");
     return { ok: true };
   } catch (e) {
@@ -65,7 +67,8 @@ export async function createConvocatoria(input: { name: string; year: number; de
 export async function setConvocatoriaStatus(id: string, status: "ACTIVE" | "ARCHIVED"): Promise<Result> {
   if (!(await hasPermission("convocatorias:manage"))) return { ok: false, error: UNAUTHORIZED };
   try {
-    await prisma.convocatoria.update({ where: { id }, data: { status } });
+    const c = await prisma.convocatoria.update({ where: { id }, data: { status }, select: { name: true } });
+    await logAction({ action: "convocatoria.status", entityType: "convocatoria", entityId: id, summary: `${status === "ARCHIVED" ? "Archivó" : "Reactivó"} la convocatoria «${c.name}»` });
     revalidatePath("/admin/convocatorias");
     return { ok: true };
   } catch (e) {

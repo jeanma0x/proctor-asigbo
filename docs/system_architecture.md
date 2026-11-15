@@ -1,28 +1,79 @@
-# Arquitectura del Sistema: ASIGBO Proctoring
+# Arquitectura del sistema: ASIGBO Proctoring
 
-## 1. Stack Tecnológico
-- **Framework:** Next.js (App Router)
-- **Lenguaje:** TypeScript
-- **Estilos:** Tailwind CSS + shadcn/ui (recomendado para componentes del panel admin)
-- **Base de Datos:** PostgreSQL alojada en [Neon.tech](https://neon.tech/)
-- **ORM:** Prisma ORM
-- **Deployment:** Vercel
+Documento técnico vivo. Última revisión: noviembre 2026.
 
-## 2. Modelo de Datos (Prisma Schema Overview)
-El sistema requiere una base de datos relacional robusta para soportar el dinamismo de las pruebas:
-1. **Exam:** Almacena la configuración general de la prueba (título, descripción, tiempo límite, estado activo/inactivo).
-2. **Question & Option:** Define la estructura del formulario (tipo de pregunta, texto, URLs de imágenes de apoyo) y las opciones correctas para auto-calificación.
-3. **CandidateSession:** Traza la sesión del alumno (inicio, fin, punteo obtenido y estado de la prueba).
-4. **AuditLog:** Registro inmutable de eventos de trampa (ej. `TAB_CHANGE`, `PASTE_ATTEMPT`, `FULLSCREEN_EXIT`), vinculado a la sesión del candidato.
+## 1. Stack
+| Capa | Tecnología |
+|---|---|
+| Framework | Next.js 16 (App Router, **Cache Components** activado, `proxy.ts` en lugar de `middleware.ts`) |
+| UI | React 19, Tailwind CSS v4 (tokens de marca en `app/globals.css`), lucide-react, gráficos SVG propios (`components/admin/charts.tsx`) |
+| Datos | PostgreSQL en Neon + Prisma 6 (`prisma/schema.prisma`) |
+| Autenticación | Auth.js / NextAuth v4 (credenciales, JWT de 8 h) + bcryptjs |
+| Correo | nodemailer por SMTP (Brevo). Ver `docs/EMAIL_SETUP.md` |
+| PDF | pdfkit (informes con membrete, `lib/report-pdf.ts`); `serverExternalPackages: ["pdfkit"]` |
+| Hosting | Vercel (despliegue automático al hacer push a `main`) |
 
-## 3. Motor Anti-Trampas (Client-side Security)
-Componente `ProctorWrapper.tsx` que envuelve el examen e intercepta eventos DOM:
-- **Pérdida de Foco:** `document.addEventListener('visibilitychange')` y `window.onblur`.
-- **Pantalla Completa:** `document.addEventListener('fullscreenchange')`.
-- **Bloqueo de UI:** `onContextMenu`, `onCopy`, `onPaste`, `onCut`, y captura global de teclado para combinaciones prohibidas (Meta+C, F12, etc.).
-- **Acción:** Cada infracción dispara un Server Action que guarda el evento en `AuditLog`.
+Nota Cache Components: todo lo que lee cookies/sesión/BD en tiempo de petición va dentro de `<Suspense>`; no se usan `export const dynamic/runtime` en rutas.
 
-## 4. Estrategia de Real-time Monitoring (Admin Dashboard)
-Dado que Vercel opera en un entorno Serverless (que no mantiene conexiones WebSockets persistentes de forma nativa), el Live Dashboard (`/admin/live`) utiliza una de las siguientes estrategias:
-- **Opción A (Polling):** Uso de SWR o React Query para hacer *polling* a la base de datos cada 3-5 segundos buscando nuevos registros en `AuditLog`.
-- **Opción B (Event-driven):** Integración de un servicio de terceros como **Pusher** para emitir eventos desde los Server Actions hacia el cliente del administrador de manera instantánea.
+## 2. Mapa de módulos
+**Panel de administración (`/admin/*`, protegido por `proxy.ts` + validación en servidor):**
+Dashboard · Exámenes (lista, editar, duplicar, publicar/cerrar, eliminar) · Constructor (nuevo examen manual o CSV) · Enlaces de acceso (bandeja de aspirantes, correo/WhatsApp, quitar/reiniciar) · Monitoreo en vivo · Convocatorias · Candidatos (directorio y perfil) · Resultados (detalle y calificación manual) · Ranking · Reportes (PDF/CSV) · Usuarios y roles · Bitácora · Mi cuenta.
+
+**Zona pública del candidato:** `/` (página informativa) y `/exam/[examId]?session=<id>` (enlace personal).
+
+## 3. Modelo de datos (resumen)
+- **Convocatoria** (año): agrupa exámenes. Nada se borra; se archiva. FK `Restrict`.
+- **Exam**: título, duración, estado (`DRAFT/PUBLISHED/CLOSED`), `shuffleQuestions/shuffleOptions`, `opensAt/closesAt` (solo restringen el *inicio*).
+- **Question / Option**: opción múltiple (autocalificada) y texto abierto (calificación manual).
+- **Candidate**: persona (correo único) con historial entre convocatorias; **CandidateNote**: notas internas.
+- **CandidateSession**: un intento por (candidato, examen). Estado, puntaje, infracciones, `decision/decidedBy/decidedAt`, `emailSentAt`. FK a examen `Restrict` (conserva el histórico).
+- **Answer**: respuesta; `manualScore/gradedBy/gradedAt` para abiertas.
+- **AuditLog**: eventos de seguridad del examen (por sesión).
+- **AdminActionLog**: bitácora de acciones de los administradores (inmutable).
+- **AdminUser**: rol (`SUPERADMIN/ADMIN/REVIEWER`), `isActive`, `tokenVersion`, `mustChangePassword`. **LoginAttempt**: límite de intentos.
+
+## 4. Seguridad
+- Sesión JWT validada **contra la BD en cada petición** (`lib/require-admin.ts`): cambiar contraseña, «cerrar en todos los dispositivos» (`tokenVersion`) o desactivar a alguien invalida sus sesiones al instante.
+- Bloqueo por 5 intentos fallidos (correo) / 20 (IP) en 15 min (`lib/rate-limit.ts`).
+- Permisos por rol en el servidor (`lib/permissions.ts`); la interfaz solo oculta opciones. Toda acción llama a `hasPermission(...)`.
+- Encabezados HTTP de seguridad y `noindex` en `/admin` (`next.config.ts`).
+- Contraseñas temporales con cambio obligatorio; política común en `lib/password.ts`.
+- Bitácora de auditoría (`lib/audit.ts`) en decisiones, calificaciones, exámenes, accesos, usuarios, exportaciones e inicios de sesión.
+- Datos personales: son menores de edad en su mayoría; ver «Pendientes» en `docs/ROADMAP.md`.
+
+### Matriz de roles
+| Permiso | Superadmin | Administrador | Revisor |
+|---|:-:|:-:|:-:|
+| Dashboard, monitoreo, resultados, ranking (ver) | ✓ | ✓ | ✓ |
+| Crear/editar exámenes, convocatorias, habilitar aspirantes | ✓ | ✓ | – |
+| Decidir (seleccionar), calificar abiertas, notas, corregir candidatos | ✓ | ✓ | – |
+| Cerrar un examen en vivo, exportar PDF/CSV | ✓ | ✓ | – |
+| Usuarios y roles, bitácora | ✓ | – | – |
+
+## 5. Motor anti-trampas (cliente)
+`components/proctor/ProctorWrapper.tsx` exige pantalla completa y registra pérdida de foco, cambio de pestaña, salida de pantalla completa y intentos de copiar/pegar/menú contextual (`actions/proctor.ts`). 3 advertencias (`MAX_STRIKES`) cierran el examen. El temporizador lo fija el servidor; el autoguardado es por pregunta; el orden aleatorio es determinista por sesión (`lib/shuffle.ts`).
+
+## 6. Calificación y ranking
+- Puntaje = opción múltiple (auto) + notas manuales de abiertas.
+- `lib/ranking.ts`: métodos *bruto*, *ponderado por dificultad* y *ponderado + integridad* (−5 por infracción), desempates por infracciones, tiempo y hora de entrega. Una pregunta abierta entra al índice solo cuando todas las entregas están calificadas en ella.
+- Las decisiones (seleccionado / lista de espera / no seleccionado) se guardan por sesión con autor y fecha.
+
+## 7. Monitoreo en vivo
+Polling con SWR cada 4 s (`actions/live.ts`); Vercel serverless no mantiene WebSockets. Alternativa futura: Pusher.
+
+## 8. Variables de entorno
+| Variable | Uso |
+|---|---|
+| `DATABASE_URL`, `DIRECT_URL` | Neon (pooled / directa) |
+| `NEXTAUTH_SECRET` | Firma de sesiones |
+| `NEXTAUTH_URL` | URL pública (local: `http://localhost:3000`) |
+| `APP_URL` | URL pública usada en los enlaces de los correos (prod: la URL de Vercel) |
+| `SMTP_HOST`, `SMTP_PORT`, `SMTP_USER`, `SMTP_PASS`, `SMTP_FROM` | Envío de correo (Brevo) |
+
+Cambiar `.env`, `next.config.ts` o el esquema de Prisma requiere **reiniciar** `next dev`; el código normal se recarga solo. Tras cambiar el esquema: `npx prisma db push` (la BD es **compartida** entre local y producción: los cambios aplican a ambos).
+
+## 9. Operación
+- **Proceso anual:** crear Convocatoria → duplicar el examen del año anterior → editar → publicar → habilitar aspirantes y enviar enlaces → monitorear → calificar abiertas → ranking y decisiones → informes PDF → archivar la convocatoria.
+- **Respaldos:** Neon ofrece restauración a un punto en el tiempo (PITR) y *branches*; revisar la retención del plan y hacer un export anual de resultados (CSV/PDF por convocatoria).
+- **Rotación de secretos:** regenerar `NEXTAUTH_SECRET` cierra todas las sesiones; la clave SMTP se regenera en Brevo y se actualiza en Vercel.
+- **Pruebas:** no hay suite automatizada en el repo; las verificaciones se hicieron con navegador (Playwright) contra datos de prueba temporales `@example.com` que se eliminan al terminar. Una suite E2E estable está en la hoja de ruta.

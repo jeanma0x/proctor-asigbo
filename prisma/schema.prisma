@@ -183,6 +183,8 @@ model CandidateSession {
   /// Decisión de la Junta tras el ranking (histórico de seleccionados por convocatoria)
   decision    SelectionDecision?
   decidedAt   DateTime?
+  /// Quién tomó la decisión (correo del administrador)
+  decidedBy   String?
   createdAt   DateTime      @default(now())
   updatedAt   DateTime      @updatedAt
 
@@ -206,6 +208,8 @@ model Answer {
   /// Calificación manual (preguntas abiertas): 0..puntos de la pregunta. null = pendiente.
   manualScore      Float?
   gradedAt         DateTime?
+  /// Quién calificó (correo del administrador)
+  gradedBy         String?
   answeredAt       DateTime @default(now())
 
   session        CandidateSession @relation(fields: [sessionId], references: [id], onDelete: Cascade)
@@ -244,6 +248,24 @@ model AdminUser {
   mustChangePassword Boolean   @default(false)
   lastLoginAt        DateTime?
   createdAt          DateTime  @default(now())
+}
+
+/// Bitácora de acciones de los administradores (inmutable: solo se escribe y se consulta).
+model AdminActionLog {
+  id         String   @id @default(cuid())
+  actorId    String?
+  actorEmail String
+  actorName  String?
+  /// Clave de la acción: «decision.set», «exam.update», «user.create», etc. (el prefijo es la categoría)
+  action     String
+  entityType String
+  entityId   String?
+  summary    String
+  createdAt  DateTime @default(now())
+
+  @@index([createdAt])
+  @@index([action, createdAt])
+  @@index([entityType, entityId])
 }
 
 /// Intentos fallidos de login (límite de intentos por correo e IP; sirve en entornos serverless).

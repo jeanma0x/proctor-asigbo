@@ -1,5 +1,6 @@
 import nodemailer from "nodemailer";
 import { MAX_STRIKES } from "@/lib/proctor-constants";
+import { fmtDateTime } from "@/lib/format";
 
 /** El envío por correo está activo solo si hay credenciales SMTP configuradas. */
 export function emailConfigured(): boolean {
@@ -14,12 +15,14 @@ export function appBaseUrl(): string {
 const esc = (s: string) =>
   s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
 
-export type Invitation = { to: string; name: string; examTitle: string; durationMinutes: number; link: string };
+export type Invitation = { to: string; name: string; examTitle: string; durationMinutes: number; link: string; opensAt?: Date | null; closesAt?: Date | null };
 
 /** Construye asunto, texto y HTML de la invitación (función pura, fácil de probar). */
 export function buildInvitation(i: Invitation) {
   const subject = `Tu acceso al examen: ${i.examTitle}`;
   const rules = [
+    ...(i.opensAt ? [`El examen se abre el ${fmtDateTime(i.opensAt)} (hora de Guatemala).`] : []),
+    ...(i.closesAt ? [`Debes iniciarlo antes del ${fmtDateTime(i.closesAt)} (hora de Guatemala).`] : []),
     `Dispones de ${i.durationMinutes} minutos desde que inicies el examen.`,
     "Usa una computadora con conexión estable y cierra otras pestañas y aplicaciones.",
     "El examen se realiza en pantalla completa y se supervisa: cambiar de pestaña, salir de pantalla completa o pegar contenido se registra como infracción.",

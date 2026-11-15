@@ -12,9 +12,10 @@ import { fmtDateTime, initials } from "@/lib/format";
 import { STATUS_LABEL } from "@/lib/labels";
 
 type Decision = "SELECTED" | "WAITLIST" | "NOT_SELECTED" | null;
-type P = Omit<CandidateProfile, "createdAt" | "sessions" | "notes"> & {
+type P = Omit<CandidateProfile, "createdAt" | "sessions" | "notes" | "history"> & {
   createdAt: string;
-  sessions: (Omit<CandidateProfile["sessions"][number], "startedAt" | "submittedAt"> & { startedAt: string | null; submittedAt: string | null })[];
+  history: (Omit<CandidateProfile["history"][number], "createdAt"> & { createdAt: string })[];
+  sessions: (Omit<CandidateProfile["sessions"][number], "startedAt" | "submittedAt" | "decidedAt"> & { startedAt: string | null; submittedAt: string | null; decidedAt: string | null })[];
   notes: (Omit<CandidateProfile["notes"][number], "createdAt"> & { createdAt: string })[];
 };
 
@@ -101,6 +102,7 @@ export default function CandidateProfileView({ p, meId, isSuper, canDecide, canG
                         <option value="">Sin decidir</option><option value="SELECTED">Seleccionado</option><option value="WAITLIST">Lista de espera</option><option value="NOT_SELECTED">No seleccionado</option>
                       </select>
                     ) : s.decision ? <span className={`rounded-full px-2.5 py-0.5 text-xs font-semibold ${DECISION[s.decision].cls}`}>{DECISION[s.decision].label}</span> : <span className="text-sm text-slate-400">Sin decidir</span>}
+                    {s.decision && s.decidedBy && <p className="mt-1 text-xs text-slate-500">por {s.decidedBy.split("@")[0]} · {fmtDateTime(s.decidedAt)}</p>}
                   </dd>
                 </div>
               </dl>
@@ -136,6 +138,21 @@ export default function CandidateProfileView({ p, meId, isSuper, canDecide, canG
               </li>
             ))}
           </ul>
+        )}
+      </section>
+      <section aria-label="Historial de acciones" className={`${card} p-6`}>
+        <h2 className="font-semibold">Historial de acciones</h2>
+        <p className="mb-4 text-sm text-slate-600">Qué hizo la Junta sobre esta persona: decisiones, calificaciones, reinicios y correcciones.</p>
+        {p.history.length === 0 ? <p className="text-sm text-slate-500">Aún no hay acciones registradas.</p> : (
+          <ol className="space-y-2">
+            {p.history.map((h) => (
+              <li key={h.id} className="flex flex-wrap items-baseline gap-x-3 text-sm">
+                <span className="w-40 shrink-0 text-xs text-slate-500">{fmtDateTime(h.createdAt)}</span>
+                <span className="font-medium text-slate-800">{h.who}</span>
+                <span className="text-slate-700">{h.summary}</span>
+              </li>
+            ))}
+          </ol>
         )}
       </section>
     </div>

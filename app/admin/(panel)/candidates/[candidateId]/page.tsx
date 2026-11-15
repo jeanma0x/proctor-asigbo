@@ -27,7 +27,8 @@ async function Profile({ params }: { params: Promise<{ candidateId: string }> })
       p={{
         ...p,
         createdAt: p.createdAt.toISOString(),
-        sessions: p.sessions.map((s) => ({ ...s, startedAt: s.startedAt?.toISOString() ?? null, submittedAt: s.submittedAt?.toISOString() ?? null })),
+        history: p.history.map((h) => ({ ...h, createdAt: h.createdAt.toISOString() })),
+        sessions: p.sessions.map((s) => ({ ...s, startedAt: s.startedAt?.toISOString() ?? null, submittedAt: s.submittedAt?.toISOString() ?? null, decidedAt: s.decidedAt?.toISOString() ?? null })),
         notes: p.notes.map((n) => ({ ...n, createdAt: n.createdAt.toISOString() })),
       }}
     />

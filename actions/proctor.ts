@@ -2,6 +2,8 @@
 
 import { prisma } from "@/lib/prisma";
 import { MAX_STRIKES } from "@/lib/proctor-constants";
+import { fmtDateTime } from "@/lib/format";
+import { windowState } from "@/lib/exam-window";
 
 /** Margen de red para aceptar una entrega justo al vencer el tiempo. */
 const SUBMIT_GRACE_MS = 60_000;
@@ -36,12 +38,19 @@ export async function startSession(sessionId: string): Promise<StartSessionResul
   try {
     const session = await prisma.candidateSession.findUnique({
       where: { id: sessionId },
-      include: { exam: { select: { status: true, durationMinutes: true } } },
+      include: { exam: { select: { status: true, durationMinutes: true, opensAt: true, closesAt: true } } },
     });
     if (!session) return { ok: false, error: "Sesión no encontrada." };
     if (session.exam.status !== "PUBLISHED") return { ok: false, error: "El examen no está disponible." };
     if (session.status === "SUBMITTED" || session.status === "TERMINATED")
       return { ok: false, error: "Esta sesión ya finalizó." };
+
+    // Solo se restringe el INICIO: quien ya empezó puede terminar su tiempo aunque la ventana cierre.
+    if (session.status === "NOT_STARTED") {
+      const w = windowState(session.exam, new Date());
+      if (w === "not_open") return { ok: false, error: `El examen abre el ${fmtDateTime(session.exam.opensAt)} (hora de Guatemala).` };
+      if (w === "closed") return { ok: false, error: `El plazo para presentar este examen terminó el ${fmtDateTime(session.exam.closesAt)} (hora de Guatemala).` };
+    }
 
     let startedAt = session.startedAt;
     if (session.status === "NOT_STARTED" || !startedAt) {

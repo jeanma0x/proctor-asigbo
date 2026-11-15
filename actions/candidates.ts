@@ -3,6 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { prisma } from "@/lib/prisma";
 import { getAdmin, hasPermission, UNAUTHORIZED } from "@/lib/require-admin";
+import { logAction } from "@/lib/audit";
 import { loadRanking } from "@/actions/ranking";
 
 type Decision = "SELECTED" | "WAITLIST" | "NOT_SELECTED" | null;
@@ -88,6 +89,8 @@ export type ProfileSession = {
   maxScore: number;
   flagCount: number;
   decision: Decision;
+  decidedBy: string | null;
+  decidedAt: Date | null;
   startedAt: Date | null;
   submittedAt: Date | null;
   rank: { position: number; of: number; percentile: number } | null;
@@ -102,6 +105,8 @@ export type CandidateProfile = {
   createdAt: Date;
   sessions: ProfileSession[];
   notes: { id: string; authorId: string | null; authorName: string; body: string; createdAt: Date }[];
+  /** Acciones de la Junta sobre esta persona (decisiones, calificaciones, reinicios…), más recientes primero. */
+  history: { id: string; who: string; summary: string; createdAt: Date }[];
 };
 
 /** Perfil completo: historial de participaciones con posición en el ranking de cada examen, y notas internas. */
@@ -116,7 +121,7 @@ export async function getCandidateProfile(id: string): Promise<CandidateProfile 
         orderBy: { createdAt: "desc" },
         where: { status: { not: "NOT_STARTED" } },
         select: {
-          id: true, status: true, score: true, flagCount: true, decision: true, startedAt: true, submittedAt: true,
+          id: true, status: true, score: true, flagCount: true, decision: true, decidedBy: true, decidedAt: true, startedAt: true, submittedAt: true,
           exam: { select: { id: true, title: true, convocatoria: { select: { name: true, year: true } } } },
           answers: { select: { manualScore: true, textResponse: true, question: { select: { type: true } } } },
         },
@@ -125,21 +130,24 @@ export async function getCandidateProfile(id: string): Promise<CandidateProfile 
   });
   if (!c) return null;
   const examIds = [...new Set(c.sessions.map((s) => s.exam.id))];
-  const [maxes, rankings] = await Promise.all([
+  const entityIds = [c.id, ...c.sessions.map((s) => s.id)];
+  const [maxes, rankings, hist] = await Promise.all([
     prisma.question.groupBy({ by: ["examId"], where: { examId: { in: examIds } }, _sum: { points: true } }),
     Promise.all(examIds.map((e) => loadRanking(e, "integrity"))),
+    prisma.adminActionLog.findMany({ where: { entityId: { in: entityIds }, entityType: { in: ["session", "candidate"] } }, orderBy: { createdAt: "desc" }, take: 30, select: { id: true, actorName: true, actorEmail: true, summary: true, createdAt: true } }),
   ]);
   const maxBy = new Map(maxes.map((m) => [m.examId, m._sum.points ?? 0]));
   const rankBy = new Map(examIds.map((e, i) => [e, rankings[i]]));
 
   return {
     id: c.id, fullName: c.fullName, email: c.email, studentId: c.studentId, createdAt: c.createdAt, notes: c.notes,
+    history: hist.map((h) => ({ id: h.id, who: h.actorName || h.actorEmail.split("@")[0], summary: h.summary, createdAt: h.createdAt })),
     sessions: c.sessions.map((s) => {
       const rk = rankBy.get(s.exam.id);
       const row = rk?.result.rows.find((r) => r.sessionId === s.id);
       return {
         id: s.id, examId: s.exam.id, examTitle: s.exam.title, convocatoria: s.exam.convocatoria?.name ?? null, year: s.exam.convocatoria?.year ?? null,
-        status: s.status, score: s.score, maxScore: maxBy.get(s.exam.id) ?? 0, flagCount: s.flagCount, decision: s.decision,
+        status: s.status, score: s.score, maxScore: maxBy.get(s.exam.id) ?? 0, flagCount: s.flagCount, decision: s.decision, decidedBy: s.decidedBy, decidedAt: s.decidedAt,
         startedAt: s.startedAt, submittedAt: s.submittedAt,
         rank: row && rk ? { position: row.position, of: rk.result.stats.n, percentile: row.percentile } : null,
         pendingGrade: s.answers.filter((a) => a.question.type === "TEXT" && a.textResponse?.trim() && a.manualScore == null).length,
@@ -158,6 +166,7 @@ export async function addNote(candidateId: string, body: string): Promise<Res> {
   if (!admin || !text) return { ok: false, error: "Escribe la nota." };
   try {
     await prisma.candidateNote.create({ data: { candidateId, authorId: admin.id, authorName: admin.name || admin.email, body: text } });
+    await logAction({ action: "candidate.note", entityType: "candidate", entityId: candidateId, summary: "Agregó una nota interna" });
     revalidatePath(`/admin/candidates/${candidateId}`);
     return { ok: true };
   } catch (e) {
@@ -176,6 +185,7 @@ export async function deleteNote(noteId: string): Promise<Res> {
     if (!note) return { ok: false, error: "La nota no existe." };
     if (note.authorId !== admin.id && admin.role !== "SUPERADMIN") return { ok: false, error: "Solo el autor o un superadmin puede borrar esta nota." };
     await prisma.candidateNote.delete({ where: { id: noteId } });
+    await logAction({ action: "candidate.note_delete", entityType: "candidate", entityId: note.candidateId, summary: "Borró una nota interna" });
     revalidatePath(`/admin/candidates/${note.candidateId}`);
     return { ok: true };
   } catch (e) {
@@ -194,7 +204,9 @@ export async function updateCandidate(id: string, input: { fullName: string; ema
   try {
     const other = await prisma.candidate.findUnique({ where: { email }, select: { id: true } });
     if (other && other.id !== id) return { ok: false, error: "Ya existe otro candidato con ese correo." };
+    const before = await prisma.candidate.findUnique({ where: { id }, select: { fullName: true, email: true } });
     await prisma.candidate.update({ where: { id }, data: { fullName, email } });
+    await logAction({ action: "candidate.update", entityType: "candidate", entityId: id, summary: `Corrigió los datos del candidato: «${before?.fullName}» <${before?.email}> → «${fullName}» <${email}>` });
     revalidatePath(`/admin/candidates/${id}`);
     revalidatePath("/admin/candidates");
     return { ok: true };

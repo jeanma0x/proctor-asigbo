@@ -2,6 +2,7 @@
 
 import { prisma } from "@/lib/prisma";
 import { hasPermission, UNAUTHORIZED } from "@/lib/require-admin";
+import { logAction } from "@/lib/audit";
 
 /** Cuántos eventos recientes se traen por sesión en curso. */
 const RECENT_LOGS = 5;
@@ -60,6 +61,8 @@ export async function terminateSession(sessionId: string): Promise<{ ok: true } 
     await prisma.auditLog.create({
       data: { sessionId, type: "OTHER", severity: "CRITICAL", details: "Sesión cerrada manualmente por la Junta" },
     });
+    const who = await prisma.candidateSession.findUnique({ where: { id: sessionId }, select: { candidate: { select: { fullName: true } }, exam: { select: { title: true } } } });
+    await logAction({ action: "session.terminate", entityType: "session", entityId: sessionId, summary: `Cerró manualmente el examen de ${who?.candidate.fullName ?? "un candidato"} en «${who?.exam.title ?? "examen"}»` });
     return { ok: true };
   } catch (e) {
     console.error(e);

@@ -4,6 +4,7 @@ import { getResultDetail } from "@/actions/results";
 import { loadRanking } from "@/actions/ranking";
 import { buildCandidateReport } from "@/lib/report-pdf";
 import { slug } from "@/lib/csv";
+import { logAction } from "@/lib/audit";
 
 
 export async function GET(_req: Request, ctx: { params: Promise<{ sessionId: string }> }) {
@@ -36,6 +37,7 @@ export async function GET(_req: Request, ctx: { params: Promise<{ sessionId: str
     },
     admin?.name || admin?.email || "ASIGBO",
   );
+  await logAction({ action: "export.pdf_candidate", entityType: "session", entityId: sessionId, summary: `Descargó el informe PDF de ${d.candidate.fullName} en «${d.exam.title}»` });
   return new Response(new Uint8Array(pdf), {
     headers: {
       "Content-Type": "application/pdf",

@@ -4,6 +4,10 @@ import bcrypt from "bcryptjs";
 import { revalidatePath } from "next/cache";
 import { prisma } from "@/lib/prisma";
 import { getAdmin, hasPermission, UNAUTHORIZED } from "@/lib/require-admin";
+import { logAction } from "@/lib/audit";
+import { ROLE_INFO } from "@/lib/permissions";
+
+const emailOf = async (id: string) => (await prisma.adminUser.findUnique({ where: { id }, select: { email: true } }))?.email ?? "un usuario";
 import { passwordIssue } from "@/lib/password";
 import { ROLES, type Role } from "@/lib/permissions";
 import type { ActionResult } from "@/actions/account";
@@ -51,6 +55,7 @@ export async function createAdmin(input: { name: string; email: string; password
     await prisma.adminUser.create({
       data: { email, name, role: input.role, passwordHash: await bcrypt.hash(input.password, 12), mustChangePassword: true },
     });
+    await logAction({ action: "user.create", entityType: "user", summary: `Creó el usuario ${email} con rol ${ROLE_INFO[input.role].label}` });
     revalidatePath("/admin/users");
     return { ok: true };
   } catch (e) {
@@ -73,6 +78,7 @@ export async function setAdminRole(id: string, role: Role): Promise<ActionResult
   if (!isRole(role)) return { ok: false, error: "Rol inválido." };
   try {
     await prisma.adminUser.update({ where: { id }, data: { role } });
+    await logAction({ action: "user.role", entityType: "user", entityId: id, summary: `Cambió el rol de ${await emailOf(id)} a ${ROLE_INFO[role].label}` });
     revalidatePath("/admin/users");
     return { ok: true };
   } catch (e) {
@@ -90,6 +96,7 @@ export async function setAdminActive(id: string, active: boolean): Promise<Actio
       where: { id },
       data: active ? { isActive: true } : { isActive: false, tokenVersion: { increment: 1 } },
     });
+    await logAction({ action: "user.active", entityType: "user", entityId: id, summary: `${active ? "Reactivó" : "Desactivó"} el acceso de ${await emailOf(id)}` });
     revalidatePath("/admin/users");
     return { ok: true };
   } catch (e) {
@@ -109,6 +116,7 @@ export async function resetAdminPassword(id: string, password: string): Promise<
       where: { id },
       data: { passwordHash: await bcrypt.hash(password, 12), mustChangePassword: true, tokenVersion: { increment: 1 } },
     });
+    await logAction({ action: "user.reset_password", entityType: "user", entityId: id, summary: `Restableció la contraseña de ${await emailOf(id)}` });
     revalidatePath("/admin/users");
     return { ok: true };
   } catch (e) {
@@ -121,7 +129,9 @@ export async function deleteAdmin(id: string): Promise<ActionResult> {
   const g = await guardTarget(id);
   if (!g.ok) return g;
   try {
+    const who = await emailOf(id);
     await prisma.adminUser.delete({ where: { id } });
+    await logAction({ action: "user.delete", entityType: "user", entityId: id, summary: `Eliminó al usuario ${who}` });
     revalidatePath("/admin/users");
     return { ok: true };
   } catch (e) {

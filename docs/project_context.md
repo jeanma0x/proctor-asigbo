@@ -1,19 +1,25 @@
-# Contexto del Proyecto: ASIGBO Proctoring System
+# Contexto del proyecto: ASIGBO Proctoring
 
-## 1. Visión General
-Este proyecto es un sistema de evaluación online seguro para los candidatos a la Beca ASIGBO (Asociación de Becados Isabel Gutiérrez de Bosch) cohorte 2027. Reemplaza herramientas genéricas (como Google Forms) por una plataforma propia (SaaS) que garantiza la integridad de la prueba.
+## 1. Visión general
+Sistema de evaluación en línea, seguro y con trazabilidad, para el proceso de becas de **ASIGBO** (Asociación de Becados Isabel Gutiérrez de Bosch). Reemplaza herramientas genéricas (Google Forms) por una plataforma propia que protege la integridad de la prueba y **conserva el histórico de cada convocatoria, año con año**.
 
-## 2. Propósito del Negocio y Usuarios
-ASIGBO funciona como un "puente" estratégico para preparar a los jóvenes en diversificado para la beca universitaria de la Fundación Juan Bautista Gutiérrez (FJBG).
-- **Candidatos (Tercero Básico):** Realizan la evaluación en un entorno bloqueado y monitoreado.
-- **Junta Directiva (Administradores):** Tienen control total sobre la creación, configuración y monitoreo de las evaluaciones.
+## 2. Usuarios
+- **Candidatos** (en su mayoría menores, Tercero Básico): reciben un enlace personal por correo o WhatsApp y presentan el examen en un entorno supervisado.
+- **Junta Directiva** (administradores): crean exámenes, habilitan aspirantes, monitorean en vivo, califican, ordenan (ranking), deciden y reportan. Tres roles: Superadmin, Administrador y Revisor (ver matriz en `system_architecture.md`).
 
-## 3. Core Features (Características Principales)
-1. **Admin Panel & Exam Builder:** Interfaz para que la Junta Directiva cree exámenes dinámicos. Permite agregar preguntas manualmente (Múltiple opción, texto, carga de imágenes) o de forma masiva subiendo un archivo CSV.
-2. **Monitoreo en Vivo (Live Dashboard):** Visualización en tiempo real de los candidatos activos. Emite alertas visuales si un estudiante incumple las reglas de la prueba.
-3. **Motor Anti-Trampas (Kiosk Mode):** Entorno estricto que bloquea atajos de teclado (Copy/Paste), detecta pérdida de foco (cambios de pestaña/ventana) y obliga al uso de pantalla completa.
+## 3. Capacidades
+1. Exámenes por convocatoria: constructor manual o CSV, edición, duplicado, orden aleatorio, ventana de apertura/cierre.
+2. Acceso por enlaces personales: bandeja de aspirantes (pegar desde Excel), envío por correo (SMTP) o WhatsApp, quitar y reiniciar intentos.
+3. Examen seguro: pantalla completa, detección de pérdida de foco, bloqueo de copiar/pegar, 3 advertencias, temporizador del servidor, autoguardado.
+4. Monitoreo en vivo con alertas y cierre manual.
+5. Resultados con respuestas por pregunta, calificación manual de abiertas, perfil de candidato con historial y notas internas.
+6. Ranking transparente (3 métodos, desempates, banderas de revisión) y decisiones persistentes (seleccionado / lista de espera / no seleccionado).
+7. Reportería con membrete ASIGBO: informe PDF individual y grupal, CSV; dashboard con KPIs e histórico por año.
+8. Usuarios y roles, desactivación de accesos y bitácora de auditoría.
 
-## 4. Reglas de Negocio de la Evaluación
-- El temporizador es server-side para evitar manipulaciones locales.
-- El candidato tiene un máximo de **3 advertencias** por infracciones de seguridad.
-- A la tercera advertencia, el examen se bloquea permanentemente y el estado del candidato pasa a `BLOCKED`.
+## 4. Reglas de negocio
+- El tiempo lo controla el servidor; la ventana de apertura/cierre solo restringe el inicio.
+- Máximo **3 advertencias** (`MAX_STRIKES`); a la tercera la sesión pasa a `TERMINATED` y no clasifica.
+- Un intento por candidato y examen. Reiniciar descarta el intento anterior (queda registrado en bitácora).
+- Un examen con candidatos que ya iniciaron no se puede borrar ni cambiar de convocatoria; sus preguntas quedan bloqueadas para no alterar resultados.
+- Las convocatorias no se eliminan: se archivan.

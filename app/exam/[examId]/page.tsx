@@ -5,6 +5,8 @@ import { prisma } from "@/lib/prisma";
 import ProctorWrapper from "@/components/proctor/ProctorWrapper";
 import ExamForm from "@/components/proctor/ExamForm";
 import { seededShuffle } from "@/lib/shuffle";
+import { fmtDateTime } from "@/lib/format";
+import { windowState } from "@/lib/exam-window";
 
 export const metadata: Metadata = {
   title: "Examen · ASIGBO Proctoring",
@@ -63,6 +65,9 @@ async function ExamContent({
           title: true,
           status: true,
           durationMinutes: true,
+          opensAt: true,
+          closesAt: true,
+          convocatoria: { select: { year: true } },
           shuffleQuestions: true,
           shuffleOptions: true,
           questions: {
@@ -95,6 +100,15 @@ async function ExamContent({
     return <Notice title="Examen no disponible" text="El examen aún no está publicado o ya fue cerrado." />;
   }
 
+  // La ventana solo restringe el inicio: quien ya empezó puede continuar y terminar.
+  if (session.status === "NOT_STARTED") {
+    const w = windowState(session.exam, new Date());
+    if (w === "not_open")
+      return <Notice title="Aún no abre tu examen" text={`Podrás presentarlo a partir del ${fmtDateTime(session.exam.opensAt)} (hora de Guatemala). Vuelve a abrir este enlace en ese momento.`} />;
+    if (w === "closed")
+      return <Notice title="El plazo para presentar terminó" text={`Este examen estuvo disponible hasta el ${fmtDateTime(session.exam.closesAt)} (hora de Guatemala). Si crees que es un error, escribe a la Junta Directiva de ASIGBO.`} />;
+  }
+
   const initialChoices: Record<string, string> = {};
   const initialTexts: Record<string, string> = {};
   for (const a of session.answers) {
@@ -116,6 +130,7 @@ async function ExamContent({
       examTitle={session.exam.title}
       initialFlagCount={session.flagCount}
       durationMinutes={session.exam.durationMinutes}
+      programLabel={session.exam.convocatoria ? `Beca ASIGBO ${session.exam.convocatoria.year}` : "Beca ASIGBO"}
       questionCount={questions.length}
       totalPoints={totalPoints}
     >

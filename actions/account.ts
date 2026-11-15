@@ -3,6 +3,7 @@
 import bcrypt from "bcryptjs";
 import { prisma } from "@/lib/prisma";
 import { getAdmin } from "@/lib/require-admin";
+import { logAction } from "@/lib/audit";
 import { passwordIssue } from "@/lib/password";
 
 export type ActionResult = { ok: true } | { ok: false; error: string };
@@ -40,6 +41,7 @@ export async function changePassword(
         tokenVersion: { increment: 1 },
       },
     });
+    await logAction({ action: "account.password", entityType: "user", entityId: admin.id, summary: "Cambió su propia contraseña (se cerraron todas sus sesiones)" }, { id: admin.id, email: admin.email, name: admin.name });
     return { ok: true };
   } catch (e) {
     console.error(e);
@@ -60,5 +62,6 @@ export async function signOutEverywhere(): Promise<ActionResult> {
   const admin = await getAdmin();
   if (!admin) return { ok: false, error: SESSION_EXPIRED };
   await prisma.adminUser.update({ where: { id: admin.id }, data: { tokenVersion: { increment: 1 } } });
+  await logAction({ action: "account.signout_all", entityType: "user", entityId: admin.id, summary: "Cerró sus sesiones en todos los dispositivos" }, { id: admin.id, email: admin.email, name: admin.name });
   return { ok: true };
 }

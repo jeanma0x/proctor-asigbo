@@ -39,6 +39,7 @@ export type RankInput = {
   startedAt: Date | null;
   submittedAt: Date | null;
   decision: "SELECTED" | "WAITLIST" | "NOT_SELECTED" | null;
+  decidedBy?: string | null;
   /** questionId → crédito 0..1 (opción múltiple: 1 acierto / 0 fallo; abierta: nota manual / puntos; undefined = pendiente de calificar) */
   credit: Record<string, number | undefined>;
 };
@@ -53,6 +54,7 @@ export type RankRow = {
   email: string;
   flagCount: number;
   decision: RankInput["decision"];
+  decidedBy: string | null;
   rawPct: number;
   weightedPct: number;
   index: number;
@@ -133,7 +135,7 @@ export function computeRanking(
     return {
       position: i + 1,
       tied: (i > 0 && idx[i - 1] === x.index) || (i < n - 1 && idx[i + 1] === x.index),
-      sessionId: x.s.sessionId, name: x.s.name, email: x.s.email, flagCount: x.s.flagCount, decision: x.s.decision,
+      sessionId: x.s.sessionId, name: x.s.name, email: x.s.email, flagCount: x.s.flagCount, decision: x.s.decision, decidedBy: x.s.decidedBy ?? null,
       rawPct: round2(x.rawPct), weightedPct: round2(x.weightedPct), index: x.index,
       minutes: x.minutes == null ? null : Math.max(1, Math.round(x.minutes)),
       timePct: timePct == null ? null : Math.round(timePct),

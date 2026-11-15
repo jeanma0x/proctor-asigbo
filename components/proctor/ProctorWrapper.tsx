@@ -71,6 +71,7 @@ export default function ProctorWrapper({
   examTitle,
   initialFlagCount,
   durationMinutes,
+  programLabel,
   questionCount,
   totalPoints,
   children,
@@ -80,6 +81,8 @@ export default function ProctorWrapper({
   examTitle: string;
   initialFlagCount: number;
   durationMinutes: number;
+  /** Ej. «Beca ASIGBO 2027» (sale del año de la convocatoria del examen). */
+  programLabel: string;
   questionCount: number;
   totalPoints: number;
   children: ReactNode;
@@ -287,7 +290,7 @@ export default function ProctorWrapper({
       <Shell>
         <div className="mx-auto grid max-w-5xl gap-10 px-6 py-10 lg:grid-cols-[1.1fr_1fr] lg:py-16">
           <div>
-            <p className="text-sm font-semibold uppercase tracking-widest text-asigbo-blue">Beca ASIGBO</p>
+            <p className="text-sm font-semibold uppercase tracking-widest text-asigbo-blue">{programLabel}</p>
             <h1 className="mt-3 font-serif text-4xl font-semibold leading-tight text-slate-900 sm:text-5xl">Hola, {firstName}.</h1>
             <p className="mt-4 text-xl leading-relaxed text-slate-700">
               Este es tu examen: <strong className="font-semibold text-slate-900">{examTitle}</strong>. Tómate un momento para leer cómo funciona antes de comenzar.
@@ -317,7 +320,9 @@ export default function ProctorWrapper({
 
             <label className="mt-6 flex cursor-pointer items-start gap-3 rounded-xl border border-slate-300 p-4 text-base text-slate-900 has-[:checked]:border-asigbo-blue has-[:checked]:bg-asigbo-blue/5">
               <input type="checkbox" checked={acknowledged} onChange={(e) => setAcknowledged(e.target.checked)} className="mt-1 h-5 w-5 shrink-0 accent-asigbo-blue" />
-              <span>Leí las reglas y estoy listo(a) para comenzar.</span>
+              <span className="text-[0.95rem] leading-relaxed">
+                Estoy de acuerdo y he leído las reglas. Comprendo que cualquier falta, sospecha o evidencia de copia, ayuda indebida o cualquier otro tipo de apoyo no permitido <strong>anula mi examen</strong> y, con ello, la posibilidad de seguir avanzando en el proceso de la {programLabel}.
+              </span>
             </label>
 
             {startError && <p role="alert" className="mt-4 rounded-lg border border-red-300 bg-red-50 p-3 text-base text-red-900">{startError}</p>}

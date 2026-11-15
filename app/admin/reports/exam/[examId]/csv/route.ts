@@ -1,6 +1,7 @@
 import { hasPermission } from "@/lib/require-admin";
 import { loadRanking } from "@/actions/ranking";
 import { csvRow, slug } from "@/lib/csv";
+import { logAction } from "@/lib/audit";
 import type { RankMethod } from "@/lib/ranking";
 
 const METHODS: RankMethod[] = ["raw", "difficulty", "integrity"];
@@ -19,6 +20,7 @@ export async function GET(req: Request, ctx: { params: Promise<{ examId: string 
     ...data.result.rows.map((r) => csvRow([r.position, r.name, r.email, r.index, r.rawPct, r.weightedPct, r.flagCount, r.minutes, r.percentile, r.reviewReasons.join("; "), r.decision ? DEC[r.decision] : ""])),
     ...data.result.excluded.map((e) => csvRow(["-", e.name, e.email, "", "", "", e.flagCount, "", "", "Examen cerrado por infracciones (no clasifica)", e.decision ? DEC[e.decision] : ""])),
   ];
+  await logAction({ action: "export.csv_ranking", entityType: "exam", entityId: examId, summary: `Descargó el ranking en CSV de «${data.exam.title}»` });
   return new Response("﻿" + lines.join("\n"), {
     headers: {
       "Content-Type": "text/csv; charset=utf-8",

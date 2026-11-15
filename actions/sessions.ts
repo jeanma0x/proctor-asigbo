@@ -3,6 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { prisma } from "@/lib/prisma";
 import { getAdmin, hasPermission, UNAUTHORIZED } from "@/lib/require-admin";
+import { logAction } from "@/lib/audit";
 import { appBaseUrl, emailConfigured, sendInvitationEmail } from "@/lib/email";
 import type { CandidateInput } from "@/lib/parse-candidates";
 
@@ -30,7 +31,7 @@ const EMAIL_OK = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 export async function generateSessions(examId: string, candidates: CandidateInput[]): Promise<GenerateResult> {
   if (!(await hasPermission("sessions:manage"))) return { ok: false, error: UNAUTHORIZED };
   try {
-    const exam = await prisma.exam.findUnique({ where: { id: examId }, select: { status: true } });
+    const exam = await prisma.exam.findUnique({ where: { id: examId }, select: { status: true, title: true } });
     if (!exam) return { ok: false, error: "El examen no existe." };
     if (exam.status !== "PUBLISHED") return { ok: false, error: "Solo se pueden generar enlaces para exámenes publicados." };
 
@@ -88,6 +89,8 @@ export async function generateSessions(examId: string, candidates: CandidateInpu
       path: `/exam/${examId}?session=${sessionId}`,
       existing: preExisting.has(c.id),
     }));
+    const fresh = rows.filter((r) => !r.existing).length;
+    await logAction({ action: "session.enable", entityType: "exam", entityId: examId, summary: `Habilitó ${fresh} aspirante(s) nuevo(s) en «${exam.title}»${rows.length - fresh ? ` (${rows.length - fresh} ya tenían acceso)` : ""}` });
     revalidatePath("/admin/live");
     return { ok: true, rows };
   } catch (e) {
@@ -156,7 +159,7 @@ export async function sendInvitations(examId: string, sessionIds: string[]): Pro
       select: {
         id: true,
         candidate: { select: { fullName: true, email: true } },
-        exam: { select: { title: true, durationMinutes: true } },
+        exam: { select: { title: true, durationMinutes: true, opensAt: true, closesAt: true } },
       },
     });
     if (sessions.length === 0) return { ok: false, error: "Ningún aspirante elegible (examen no publicado o sesión finalizada)." };
@@ -173,6 +176,8 @@ export async function sendInvitations(examId: string, sessionIds: string[]): Pro
               name: s.candidate.fullName,
               examTitle: s.exam.title,
               durationMinutes: s.exam.durationMinutes,
+              opensAt: s.exam.opensAt,
+              closesAt: s.exam.closesAt,
               link: `${base}/exam/${examId}?session=${s.id}`,
             });
             sentIds.push(s.id);
@@ -186,6 +191,7 @@ export async function sendInvitations(examId: string, sessionIds: string[]): Pro
     if (sentIds.length) {
       await prisma.candidateSession.updateMany({ where: { id: { in: sentIds } }, data: { emailSentAt: new Date() } });
     }
+    await logAction({ action: "session.email", entityType: "exam", entityId: examId, summary: `Envió ${sentIds.length} invitación(es) por correo${failed.length ? ` (${failed.length} fallaron)` : ""}` });
     return { ok: true, sent: sentIds.length, failed };
   } catch (e) {
     console.error(e);
@@ -200,8 +206,10 @@ const refreshSessions = () => ["/admin/sessions", "/admin/live", "/admin/results
 export async function removeSession(sessionId: string): Promise<Res> {
   if (!(await hasPermission("sessions:manage"))) return { ok: false, error: UNAUTHORIZED };
   try {
+    const who = await prisma.candidateSession.findUnique({ where: { id: sessionId }, select: { candidate: { select: { fullName: true } }, exam: { select: { title: true } } } });
     const res = await prisma.candidateSession.deleteMany({ where: { id: sessionId, status: "NOT_STARTED" } });
     if (res.count === 0) return { ok: false, error: "Solo se puede quitar a quien aún no inició. Para empezar de nuevo usa «Reiniciar intento»." };
+    await logAction({ action: "session.remove", entityType: "session", entityId: sessionId, summary: `Quitó el acceso de ${who?.candidate.fullName ?? "un aspirante"} a «${who?.exam.title ?? "examen"}»` });
     refreshSessions();
     return { ok: true };
   } catch (e) {
@@ -218,7 +226,7 @@ export async function resetSession(sessionId: string): Promise<Res> {
   if (!(await hasPermission("sessions:manage"))) return { ok: false, error: UNAUTHORIZED };
   const admin = await getAdmin();
   try {
-    const s = await prisma.candidateSession.findUnique({ where: { id: sessionId }, select: { status: true, score: true, flagCount: true } });
+    const s = await prisma.candidateSession.findUnique({ where: { id: sessionId }, select: { status: true, score: true, flagCount: true, candidate: { select: { fullName: true } }, exam: { select: { title: true } } } });
     if (!s) return { ok: false, error: "La sesión no existe." };
     if (s.status === "NOT_STARTED") return { ok: false, error: "Esta persona aún no ha iniciado: no hay nada que reiniciar." };
     await prisma.$transaction([
@@ -234,6 +242,7 @@ export async function resetSession(sessionId: string): Promise<Res> {
         },
       }),
     ]);
+    await logAction({ action: "session.reset", entityType: "session", entityId: sessionId, summary: `Reinició el intento de ${s.candidate.fullName} en «${s.exam.title}» (estado anterior: ${s.status}, puntaje: ${s.score ?? "-"})` });
     refreshSessions();
     return { ok: true };
   } catch (e) {

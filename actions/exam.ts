@@ -4,6 +4,8 @@ import { randomUUID } from "crypto";
 import { revalidatePath } from "next/cache";
 import { prisma } from "@/lib/prisma";
 import { hasPermission, UNAUTHORIZED } from "@/lib/require-admin";
+import { logAction } from "@/lib/audit";
+import { parseWindow } from "@/lib/exam-window";
 
 export type QuestionTypeInput = "MULTIPLE_CHOICE" | "TEXT";
 
@@ -22,6 +24,9 @@ export type CreateExamInput = {
   convocatoriaId: string;
   shuffleQuestions?: boolean;
   shuffleOptions?: boolean;
+  /** ISO UTC; null/omitido = sin límite */
+  opensAt?: string | null;
+  closesAt?: string | null;
   questions: ManualQuestionInput[];
 };
 
@@ -48,7 +53,7 @@ type PreparedOption = {
 
 /** Crea el examen + preguntas + opciones con createMany en una sola transacción. */
 async function persistExam(
-  meta: { title: string; description?: string; durationMinutes: number; convocatoriaId: string; shuffleQuestions?: boolean; shuffleOptions?: boolean },
+  meta: { title: string; description?: string; durationMinutes: number; convocatoriaId: string; shuffleQuestions?: boolean; shuffleOptions?: boolean; opensAt?: string | null; closesAt?: string | null },
   questions: PreparedQuestion[],
   options: PreparedOption[],
 ): Promise<ActionResult> {
@@ -61,6 +66,8 @@ async function persistExam(
         convocatoriaId: meta.convocatoriaId,
         shuffleQuestions: !!meta.shuffleQuestions,
         shuffleOptions: !!meta.shuffleOptions,
+        opensAt: meta.opensAt ? new Date(meta.opensAt) : null,
+        closesAt: meta.closesAt ? new Date(meta.closesAt) : null,
         status: "DRAFT",
       },
     });
@@ -72,6 +79,7 @@ async function persistExam(
     }
     return created;
   });
+  await logAction({ action: "exam.create", entityType: "exam", entityId: exam.id, summary: `Creó el examen «${meta.title}» con ${questions.length} pregunta(s)` });
   revalidatePath("/admin/exam-builder");
   return { ok: true, examId: exam.id, questionCount: questions.length };
 }
@@ -106,7 +114,8 @@ function cleanUrl(url?: string): string | null {
 export async function createExamManual(input: CreateExamInput): Promise<ActionResult> {
   if (!(await hasPermission("exams:write"))) return { ok: false, error: UNAUTHORIZED };
   try {
-    const metaError = validMeta(input.title, input.durationMinutes) ?? (await validConvocatoria(input.convocatoriaId));
+    const w = parseWindow(input.opensAt, input.closesAt);
+    const metaError = validMeta(input.title, input.durationMinutes) ?? (w.ok ? null : w.error) ?? (await validConvocatoria(input.convocatoriaId));
     if (metaError) return { ok: false, error: metaError };
     if (!input.questions?.length) return { ok: false, error: "Agrega al menos una pregunta." };
 
@@ -156,12 +165,13 @@ const OPTION_COLUMNS = ["OpcionA", "OpcionB", "OpcionC", "OpcionD"] as const;
  * Opcionales: Puntos, ImagenUrl.
  */
 export async function importExamFromCsv(
-  meta: { title: string; description?: string; durationMinutes: number; convocatoriaId: string; shuffleQuestions?: boolean; shuffleOptions?: boolean },
+  meta: { title: string; description?: string; durationMinutes: number; convocatoriaId: string; shuffleQuestions?: boolean; shuffleOptions?: boolean; opensAt?: string | null; closesAt?: string | null },
   rows: CsvRow[],
 ): Promise<ActionResult> {
   if (!(await hasPermission("exams:write"))) return { ok: false, error: UNAUTHORIZED };
   try {
-    const metaError = validMeta(meta.title, meta.durationMinutes) ?? (await validConvocatoria(meta.convocatoriaId));
+    const w = parseWindow(meta.opensAt, meta.closesAt);
+    const metaError = validMeta(meta.title, meta.durationMinutes) ?? (w.ok ? null : w.error) ?? (await validConvocatoria(meta.convocatoriaId));
     if (metaError) return { ok: false, error: metaError };
     if (!rows?.length) return { ok: false, error: "El CSV no contiene filas." };
     if (rows.length > 1000) return { ok: false, error: "Máximo 1000 preguntas por CSV." };
@@ -223,13 +233,14 @@ export async function publishExam(
   try {
     const exam = await prisma.exam.findUnique({
       where: { id: examId },
-      select: { status: true, _count: { select: { questions: true } } },
+      select: { title: true, status: true, _count: { select: { questions: true } } },
     });
     if (!exam) return { ok: false, error: "El examen no existe." };
     if (exam.status !== "DRAFT") return { ok: false, error: "Solo se pueden publicar exámenes en borrador." };
     if (exam._count.questions === 0) return { ok: false, error: "El examen no tiene preguntas." };
 
     await prisma.exam.update({ where: { id: examId }, data: { status: "PUBLISHED" } });
+    await logAction({ action: "exam.status", entityType: "exam", entityId: examId, summary: `Publicó el examen «${exam.title}»` });
     revalidatePath("/admin/exam-builder");
     revalidatePath("/admin/sessions");
     return { ok: true };

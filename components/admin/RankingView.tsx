@@ -155,6 +155,7 @@ export default function RankingView({ exams, canDecide, canExport, initialExamId
                         <option value="NOT_SELECTED">No seleccionado</option>
                       </select>
                     ) : x.decision ? <span className={`rounded-full px-2.5 py-1 text-xs font-semibold ${DECISION[x.decision].cls}`}>{DECISION[x.decision].label}</span> : <span className="text-xs text-slate-400">Sin decidir</span>}
+                    {x.decision && x.decidedBy && <p className="mt-1 text-xs text-slate-500" title={x.decidedBy}>por {x.decidedBy.split("@")[0]}</p>}
                   </td>
                 </tr>
               ))}

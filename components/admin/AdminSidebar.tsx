@@ -5,7 +5,7 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { signOut } from "next-auth/react";
 import {
-  CalendarRange, ClipboardCheck, Contact, ClipboardList, KeyRound, FileBarChart, LayoutDashboard, LogOut, MonitorPlay, ShieldCheck, Trophy, UserCog, Users,
+  CalendarRange, ClipboardCheck, Contact, ClipboardList, KeyRound, FileBarChart, LayoutDashboard, LogOut, MonitorPlay, ScrollText, ShieldCheck, Trophy, UserCog, Users,
   type LucideIcon,
 } from "lucide-react";
 import { initials } from "@/lib/format";
@@ -37,6 +37,7 @@ const GROUPS: { title: string; items: NavItem[] }[] = [
     title: "Administración",
     items: [
       { href: "/admin/users", label: "Usuarios y Roles", icon: Users, permission: "users:manage" },
+      { href: "/admin/audit", label: "Bitácora", icon: ScrollText, permission: "audit:view" },
       { href: "/admin/account", label: "Mi cuenta", icon: UserCog },
     ],
   },

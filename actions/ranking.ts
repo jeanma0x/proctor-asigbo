@@ -2,10 +2,12 @@
 
 import { revalidatePath } from "next/cache";
 import { prisma } from "@/lib/prisma";
-import { hasPermission, UNAUTHORIZED } from "@/lib/require-admin";
+import { getAdmin, hasPermission, UNAUTHORIZED } from "@/lib/require-admin";
+import { logAction } from "@/lib/audit";
 import { computeRanking, type RankInput, type RankMethod } from "@/lib/ranking";
 
 type Decision = "SELECTED" | "WAITLIST" | "NOT_SELECTED";
+const DECISION_ES = { SELECTED: "Seleccionado", WAITLIST: "Lista de espera", NOT_SELECTED: "No seleccionado" } as const;
 const METHODS: RankMethod[] = ["raw", "difficulty", "integrity"];
 
 export type RankingExam = {
@@ -51,7 +53,7 @@ export async function loadRanking(examId: string, method: RankMethod) {
   const sessions = await prisma.candidateSession.findMany({
     where: { examId, status: { in: ["SUBMITTED", "TERMINATED"] } },
     select: {
-      id: true, status: true, flagCount: true, startedAt: true, submittedAt: true, decision: true,
+      id: true, status: true, flagCount: true, startedAt: true, submittedAt: true, decision: true, decidedBy: true,
       candidate: { select: { fullName: true, email: true } },
       answers: { select: { questionId: true, selectedOptionId: true, textResponse: true, manualScore: true } },
     },
@@ -78,6 +80,7 @@ export async function loadRanking(examId: string, method: RankMethod) {
     startedAt: s.startedAt,
     submittedAt: s.submittedAt,
     decision: s.decision,
+    decidedBy: s.decidedBy,
     credit: creditOf(s),
   }));
   const result = computeRanking(inputs, exam.questions.map((q) => ({ id: q.id, text: q.text, points: q.points, type: q.type })), exam.durationMinutes, method);
@@ -95,7 +98,16 @@ export async function setDecision(sessionId: string, decision: Decision | null):
   if (!(await hasPermission("ranking:decide"))) return { ok: false, error: UNAUTHORIZED };
   if (decision !== null && !["SELECTED", "WAITLIST", "NOT_SELECTED"].includes(decision)) return { ok: false, error: "Decisión inválida." };
   try {
-    await prisma.candidateSession.update({ where: { id: sessionId }, data: { decision, decidedAt: decision ? new Date() : null } });
+    const admin = await getAdmin();
+    const row = await prisma.candidateSession.update({
+      where: { id: sessionId },
+      data: { decision, decidedAt: decision ? new Date() : null, decidedBy: decision ? (admin?.email ?? null) : null },
+      select: { candidate: { select: { fullName: true } }, exam: { select: { title: true } } },
+    });
+    await logAction({
+      action: "decision.set", entityType: "session", entityId: sessionId,
+      summary: `${decision ? `Marcó a ${row.candidate.fullName} como «${DECISION_ES[decision]}»` : `Quitó la decisión de ${row.candidate.fullName}`} en «${row.exam.title}»`,
+    });
     revalidatePath("/admin/ranking");
     return { ok: true };
   } catch (e) {
@@ -115,11 +127,17 @@ export async function applyShortlist(examId: string, method: RankMethod, selecte
     const ids = data.result.rows.map((r) => r.sessionId);
     if (n > ids.length) return { ok: false, error: `Solo hay ${ids.length} candidatos clasificados.` };
     const now = new Date();
+    const admin = await getAdmin();
+    const by = admin?.email ?? null;
     await prisma.$transaction([
-      prisma.candidateSession.updateMany({ where: { id: { in: ids.slice(0, n) } }, data: { decision: "SELECTED", decidedAt: now } }),
-      prisma.candidateSession.updateMany({ where: { id: { in: ids.slice(n, n + w) } }, data: { decision: "WAITLIST", decidedAt: now } }),
-      prisma.candidateSession.updateMany({ where: { id: { in: ids.slice(n + w) } }, data: { decision: "NOT_SELECTED", decidedAt: now } }),
+      prisma.candidateSession.updateMany({ where: { id: { in: ids.slice(0, n) } }, data: { decision: "SELECTED", decidedAt: now, decidedBy: by } }),
+      prisma.candidateSession.updateMany({ where: { id: { in: ids.slice(n, n + w) } }, data: { decision: "WAITLIST", decidedAt: now, decidedBy: by } }),
+      prisma.candidateSession.updateMany({ where: { id: { in: ids.slice(n + w) } }, data: { decision: "NOT_SELECTED", decidedAt: now, decidedBy: by } }),
     ]);
+    await logAction({
+      action: "decision.shortlist", entityType: "exam", entityId: examId,
+      summary: `Preselección en «${data.exam.title}»: ${n} seleccionado(s), ${Math.min(w, Math.max(0, ids.length - n))} en lista de espera y ${Math.max(0, ids.length - n - w)} no seleccionado(s) (método: ${method})`,
+    });
     revalidatePath("/admin/ranking");
     return { ok: true };
   } catch (e) {

@@ -16,6 +16,7 @@ import {
   AlertCircle,
 } from "lucide-react";
 import { updateExam, type ExamForEdit } from "@/actions/exams-admin";
+import { localToIso } from "@/lib/exam-window";
 import {
   createExamManual,
   importExamFromCsv,
@@ -72,6 +73,8 @@ export default function ExamBuilder({ convocatorias, initial }: { convocatorias:
   const [description, setDescription] = useState(initial?.description ?? "");
   const [duration, setDuration] = useState(initial?.durationMinutes ?? 60);
   const [convocatoriaId, setConvocatoriaId] = useState(initial?.convocatoriaId || convocatorias[0]?.id || "");
+  const [opensLocal, setOpensLocal] = useState(initial?.opensAtLocal ?? "");
+  const [closesLocal, setClosesLocal] = useState(initial?.closesAtLocal ?? "");
   const [shuffleQuestions, setShuffleQuestions] = useState(initial?.shuffleQuestions ?? false);
   const [shuffleOptions, setShuffleOptions] = useState(initial?.shuffleOptions ?? false);
   const [questions, setQuestions] = useState<QuestionDraft[]>(() =>
@@ -149,6 +152,8 @@ export default function ExamBuilder({ convocatorias, initial }: { convocatorias:
         convocatoriaId,
         shuffleQuestions,
         shuffleOptions,
+        opensAt: localToIso(opensLocal),
+        closesAt: localToIso(closesLocal),
         questions: locked
           ? undefined
           : questions.map((q) => ({ text: q.text, type: q.type, points: q.points, imageUrl: q.imageUrl, options: q.type === "MULTIPLE_CHOICE" ? q.options : [] })),
@@ -169,6 +174,8 @@ export default function ExamBuilder({ convocatorias, initial }: { convocatorias:
         convocatoriaId,
         shuffleQuestions,
         shuffleOptions,
+        opensAt: localToIso(opensLocal),
+        closesAt: localToIso(closesLocal),
         questions: questions.map((q) => ({
           text: q.text,
           type: q.type,
@@ -189,7 +196,7 @@ export default function ExamBuilder({ convocatorias, initial }: { convocatorias:
   const submitCsv = () => {
     setResult(null);
     startTransition(async () => {
-      const res = await importExamFromCsv({ title, description, durationMinutes: duration, convocatoriaId, shuffleQuestions, shuffleOptions }, csvRows);
+      const res = await importExamFromCsv({ title, description, durationMinutes: duration, convocatoriaId, shuffleQuestions, shuffleOptions, opensAt: localToIso(opensLocal), closesAt: localToIso(closesLocal) }, csvRows);
       setResult(res);
       if (res.ok) {
         setCsvRows([]);
@@ -236,6 +243,18 @@ export default function ExamBuilder({ convocatorias, initial }: { convocatorias:
             <span className="mb-1 block text-sm font-medium">Descripción (opcional)</span>
             <textarea className={inputCls} rows={2} value={description} onChange={(e) => setDescription(e.target.value)} />
           </label>
+          <fieldset className="sm:col-span-3 grid gap-3 sm:grid-cols-2">
+            <legend className="mb-1 text-sm font-medium">Disponibilidad (opcional, hora de Guatemala)</legend>
+            <label>
+              <span className="mb-1 block text-xs text-slate-600">Se abre el</span>
+              <input type="datetime-local" className={inputCls} value={opensLocal} onChange={(e) => setOpensLocal(e.target.value)} />
+            </label>
+            <label>
+              <span className="mb-1 block text-xs text-slate-600">Se cierra el (último momento para iniciar)</span>
+              <input type="datetime-local" className={inputCls} value={closesLocal} onChange={(e) => setClosesLocal(e.target.value)} />
+            </label>
+            <p className="text-xs text-slate-500 sm:col-span-2">Fuera de esa ventana el candidato no puede iniciar. Quien ya empezó puede terminar su tiempo aunque el examen cierre. Déjalo vacío para no limitar.</p>
+          </fieldset>
           <fieldset className="sm:col-span-3 grid gap-3 sm:grid-cols-2">
             <legend className="mb-1 text-sm font-medium">Orden aleatorio</legend>
             {([

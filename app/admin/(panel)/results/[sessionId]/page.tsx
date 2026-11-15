@@ -80,6 +80,7 @@ async function Detail({ params }: { params: Promise<{ sessionId: string }> }) {
               ) : (
                 <span className={`shrink-0 rounded-full px-2.5 py-1 text-xs font-semibold ${q.graded && q.answered ? "bg-emerald-100 text-emerald-800" : q.answered ? "bg-amber-100 text-amber-900" : "bg-slate-100 text-slate-700"}`}>
                   {!q.answered ? "Sin responder" : q.graded ? `Calificada ${q.earned} / ${q.points}` : "Pendiente de calificar"}
+                  {q.answered && q.graded && q.gradedBy ? <span className="ml-1 font-normal opacity-80">· por {q.gradedBy.split("@")[0]}</span> : null}
                 </span>
               )}
             </div>

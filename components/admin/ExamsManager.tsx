@@ -3,10 +3,10 @@
 import { useState, useTransition } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { AlertCircle, Copy, Loader2, Lock, Pencil, Plus, Shuffle, Trash2 } from "lucide-react";
+import { AlertCircle, CalendarClock, Copy, Loader2, Lock, Pencil, Plus, Shuffle, Trash2 } from "lucide-react";
 import { deleteExam, duplicateExam, setExamStatus, type ExamListRow } from "@/actions/exams-admin";
 import { btnGhost, btnPrimary, card, inputCls } from "@/components/admin/ui";
-import { fmtDate } from "@/lib/format";
+import { fmtDate, fmtDateTime } from "@/lib/format";
 
 type Conv = { id: string; name: string; year: number };
 
@@ -69,6 +69,7 @@ export default function ExamsManager({ exams, convocatorias }: { exams: ExamList
                       <p className="font-semibold">{e.title}</p>
                       <p className="text-xs text-slate-500">{e.convocatoria ?? "Sin convocatoria"} · creado {fmtDate(e.createdAt)}</p>
                       {e.shuffleQuestions && <p className="mt-1 inline-flex items-center gap-1 text-xs text-slate-500"><Shuffle className="h-3 w-3" aria-hidden="true" /> Preguntas en orden aleatorio</p>}
+                      {(e.opensAt || e.closesAt) && <p className="mt-1 flex items-center gap-1 text-xs text-slate-500"><CalendarClock className="h-3 w-3" aria-hidden="true" /> {e.opensAt ? `Abre ${fmtDateTime(e.opensAt)}` : "Abierto"}{e.closesAt ? ` · cierra ${fmtDateTime(e.closesAt)}` : ""}</p>}
                     </td>
                     <td className="px-4 py-4"><span className={`rounded-full px-2.5 py-1 text-xs font-semibold ${STATUS[e.status].cls}`}>{STATUS[e.status].label}</span></td>
                     <td className="whitespace-nowrap px-4 py-4 text-slate-700">{e.questions} preguntas · {e.points} pts<br /><span className="text-xs text-slate-500">{e.durationMinutes} min</span></td>
