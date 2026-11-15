@@ -4,13 +4,15 @@ import Image from "next/image";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { signOut } from "next-auth/react";
-import { ClipboardList, KeyRound, LogOut, MonitorPlay, type LucideIcon } from "lucide-react";
+import { ClipboardList, KeyRound, LogOut, MonitorPlay, UserCog, type LucideIcon } from "lucide-react";
 
 const NAV: { href: string; label: string; icon: LucideIcon }[] = [
   { href: "/admin/exam-builder", label: "Constructor de Exámenes", icon: ClipboardList },
   { href: "/admin/sessions", label: "Gestión de Accesos", icon: KeyRound },
   { href: "/admin/live", label: "Monitoreo en Vivo", icon: MonitorPlay },
 ];
+
+const ACCOUNT_NAV = { href: "/admin/account", label: "Mi cuenta", icon: UserCog };
 
 export default function AdminSidebar() {
   const pathname = usePathname();
@@ -38,7 +40,7 @@ export default function AdminSidebar() {
         <p className="mb-1 hidden px-3 text-xs font-semibold uppercase tracking-wider text-blue-300/70 md:block">
           Gestión
         </p>
-        {NAV.map(({ href, label, icon: Icon }) => {
+        {[...NAV, ACCOUNT_NAV].map(({ href, label, icon: Icon }) => {
           const active = pathname === href || pathname.startsWith(`${href}/`);
           return (
             <Link

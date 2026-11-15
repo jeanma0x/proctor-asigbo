@@ -1,12 +1,12 @@
 "use client";
 
-import { useState, type FormEvent } from "react";
+import { useState, type FormEvent, type KeyboardEvent } from "react";
 import { signIn } from "next-auth/react";
 import { useSearchParams } from "next/navigation";
-import { AlertCircle, Loader2 } from "lucide-react";
+import { AlertCircle, Eye, EyeOff, Loader2, Lock, Mail } from "lucide-react";
 
 const inputClass =
-  "mt-1 block w-full rounded-lg border border-slate-300 bg-white px-3 py-2.5 text-sm text-slate-900 outline-none transition-colors focus:border-asigbo-blue focus:ring-2 focus:ring-asigbo-blue/30";
+  "block w-full rounded-xl border border-slate-300 bg-white py-3 pl-11 text-sm text-slate-900 outline-none transition-colors placeholder:text-slate-400 focus:border-asigbo-blue focus:ring-2 focus:ring-asigbo-blue/30";
 
 /** Solo rutas internas de /admin, para evitar open-redirect. */
 function safeCallback(raw: string | null) {
@@ -17,6 +17,12 @@ export default function LoginForm() {
   const params = useSearchParams();
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
+  const [showPassword, setShowPassword] = useState(false);
+  const [capsLock, setCapsLock] = useState(false);
+
+  function onKey(e: KeyboardEvent<HTMLInputElement>) {
+    setCapsLock(e.getModifierState("CapsLock"));
+  }
 
   async function onSubmit(e: FormEvent<HTMLFormElement>) {
     e.preventDefault();
@@ -43,25 +49,49 @@ export default function LoginForm() {
   }
 
   return (
-    <form onSubmit={onSubmit} className="space-y-4" noValidate>
+    <form onSubmit={onSubmit} className="space-y-5" noValidate>
       {error && (
-        <div role="alert" className="flex items-start gap-2 rounded-lg border border-red-200 bg-red-50 px-3 py-2.5 text-sm text-red-700">
+        <div role="alert" className="flex items-start gap-2 rounded-xl border border-red-200 bg-red-50 px-3 py-2.5 text-sm text-red-700">
           <AlertCircle className="mt-0.5 h-4 w-4 shrink-0" aria-hidden="true" />
           <span>{error}</span>
         </div>
       )}
+
       <div>
         <label htmlFor="email" className="text-sm font-medium text-slate-700">Correo electrónico</label>
-        <input id="email" name="email" type="email" autoComplete="email" required className={inputClass} placeholder="admin@asigbo.org" />
+        <div className="relative mt-1.5">
+          <Mail className="pointer-events-none absolute left-3.5 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" aria-hidden="true" />
+          <input
+            id="email" name="email" type="email" autoComplete="username" required autoFocus
+            placeholder="correo@ejemplo.com" className={`${inputClass} pr-4`}
+          />
+        </div>
       </div>
+
       <div>
         <label htmlFor="password" className="text-sm font-medium text-slate-700">Contraseña</label>
-        <input id="password" name="password" type="password" autoComplete="current-password" required className={inputClass} />
+        <div className="relative mt-1.5">
+          <Lock className="pointer-events-none absolute left-3.5 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" aria-hidden="true" />
+          <input
+            id="password" name="password" type={showPassword ? "text" : "password"} autoComplete="current-password" required
+            placeholder="••••••••" onKeyUp={onKey} onKeyDown={onKey} className={`${inputClass} pr-12`}
+          />
+          <button
+            type="button"
+            onClick={() => setShowPassword((s) => !s)}
+            aria-label={showPassword ? "Ocultar contraseña" : "Mostrar contraseña"}
+            className="absolute inset-y-0 right-0 flex w-12 cursor-pointer items-center justify-center rounded-r-xl text-slate-500 transition-colors hover:text-slate-800 focus-visible:outline-2 focus-visible:outline-asigbo-blue"
+          >
+            {showPassword ? <EyeOff className="h-4 w-4" aria-hidden="true" /> : <Eye className="h-4 w-4" aria-hidden="true" />}
+          </button>
+        </div>
+        {capsLock && <p className="mt-1.5 text-xs font-medium text-amber-700">Bloq Mayús está activado.</p>}
       </div>
+
       <button
         type="submit"
         disabled={loading}
-        className="flex w-full cursor-pointer items-center justify-center gap-2 rounded-lg bg-asigbo-blue px-4 py-2.5 text-sm font-semibold text-white transition-colors hover:bg-asigbo-blue-dark focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-asigbo-blue disabled:cursor-not-allowed disabled:opacity-70"
+        className="flex w-full cursor-pointer items-center justify-center gap-2 rounded-xl bg-asigbo-blue px-4 py-3 text-sm font-semibold text-white shadow-lg shadow-asigbo-blue/25 transition-colors hover:bg-asigbo-blue-dark focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-asigbo-blue disabled:cursor-not-allowed disabled:opacity-70"
       >
         {loading && <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" />}
         {loading ? "Ingresando…" : "Ingresar"}
