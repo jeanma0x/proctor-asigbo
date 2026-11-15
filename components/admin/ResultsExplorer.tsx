@@ -7,7 +7,7 @@ import useSWR from "swr";
 import { useSearchParams } from "next/navigation";
 import { ArrowDown, ArrowUp, ChevronRight, Download, FileText, Search, Trophy } from "lucide-react";
 import { exportResultsCsv, listResults, type ResultFilters } from "@/actions/results";
-import ConfirmDownload from "@/components/admin/ConfirmDownload";
+import PdfPreview from "@/components/admin/PdfPreview";
 import ConfirmDialog from "@/components/admin/ConfirmDialog";
 import { btnGhost, card, inputCls } from "@/components/admin/ui";
 import { fmtDateTime } from "@/lib/format";
@@ -95,7 +95,7 @@ export default function ResultsExplorer({ canExport }: { canExport: boolean }) {
           <div className="mt-3 flex flex-wrap items-center gap-2 border-t border-slate-100 pt-3">
             <span className="text-xs font-medium text-slate-500">Este examen:</span>
             <Link href={`/admin/ranking?e=${examId}`} className={`${btnGhost} !px-3 !py-1.5 text-xs`}><Trophy className="h-3.5 w-3.5" aria-hidden="true" /> Ranking y decisiones</Link>
-            {canExport && <ConfirmDownload href={`/admin/reports/exam/${examId}/pdf`} className={`${btnGhost} !px-3 !py-1.5 text-xs`} what="el informe grupal PDF"><FileText className="h-3.5 w-3.5" aria-hidden="true" /> Informe grupal PDF</ConfirmDownload>}
+            {canExport && <PdfPreview href={`/admin/reports/exam/${examId}/pdf`} title="Informe grupal del examen" className={`${btnGhost} !px-3 !py-1.5 text-xs`}><FileText className="h-3.5 w-3.5" aria-hidden="true" /> Informe grupal PDF</PdfPreview>}
           </div>
         )}
         {exportError && <p role="alert" className="mt-2 text-sm text-red-700">{exportError}</p>}
@@ -152,9 +152,9 @@ export default function ResultsExplorer({ canExport }: { canExport: boolean }) {
                     <td className="whitespace-nowrap px-4 py-3 text-slate-600">{fmtDateTime(r.submittedAt)}</td>
                     <td className="whitespace-nowrap px-4 py-3 text-right">
                       {canExport && r.status !== "NOT_STARTED" && (
-                        <a href={`/admin/reports/candidate/${r.id}/pdf`} aria-label={`Informe PDF de ${r.name}`} title="Informe PDF" className="inline-flex rounded-lg p-1.5 text-slate-500 hover:bg-slate-100">
+                        <PdfPreview href={`/admin/reports/candidate/${r.id}/pdf`} title={`Informe de ${r.name}`} label={`Vista previa del informe de ${r.name}`} className="inline-flex cursor-pointer rounded-lg p-1.5 text-slate-500 hover:bg-slate-100">
                           <FileText className="h-4 w-4" aria-hidden="true" />
-                        </a>
+                        </PdfPreview>
                       )}
                       <Link href={`/admin/results/${r.id}`} aria-label={`Ver detalle de ${r.name}`} className="inline-flex rounded-lg p-1.5 text-slate-500 hover:bg-slate-100">
                         <ChevronRight className="h-4 w-4" aria-hidden="true" />

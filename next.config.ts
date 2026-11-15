@@ -19,6 +19,8 @@ const nextConfig: NextConfig = {
       { source: "/:path*", headers: securityHeaders },
       // El panel y la API de autenticación nunca deben indexarse ni guardarse en caché compartida.
       { source: "/admin/:path*", headers: [{ key: "X-Robots-Tag", value: "noindex, nofollow" }, { key: "Cache-Control", value: "private, no-store" }] },
+      // Las vistas previas de informes se muestran en un iframe del propio panel.
+      { source: "/admin/reports/:path*/pdf", headers: [{ key: "X-Frame-Options", value: "SAMEORIGIN" }, { key: "Content-Security-Policy", value: "frame-ancestors 'self'; base-uri 'self'; form-action 'self'" }] },
       { source: "/api/auth/:path*", headers: [{ key: "Cache-Control", value: "no-store" }] },
     ];
   },

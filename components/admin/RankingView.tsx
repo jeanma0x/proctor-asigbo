@@ -6,6 +6,7 @@ import useSWR from "swr";
 import Link from "next/link";
 import { AlertCircle, Download, FileText, Flag, Info, Loader2 } from "lucide-react";
 import { applyShortlist, getRanking, setDecision, type RankingExam } from "@/actions/ranking";
+import PdfPreview from "@/components/admin/PdfPreview";
 import ConfirmDownload from "@/components/admin/ConfirmDownload";
 import { btnGhost, btnPrimary, card, inputCls } from "@/components/admin/ui";
 import { METHOD_INFO, STRIKE_PENALTY, type RankMethod } from "@/lib/ranking";
@@ -58,7 +59,7 @@ export default function RankingView({ exams, canDecide, canExport, initialExamId
           </div>
           {canExport && examId && (
             <div className="flex gap-2">
-              <ConfirmDownload href={`/admin/reports/exam/${examId}/pdf?method=${method}`} className={btnPrimary} what="el informe PDF grupal"><FileText className="h-4 w-4" aria-hidden="true" /> Informe PDF</ConfirmDownload>
+              <PdfPreview href={`/admin/reports/exam/${examId}/pdf?method=${method}`} title="Informe grupal del examen" className={btnPrimary}><FileText className="h-4 w-4" aria-hidden="true" /> Informe PDF</PdfPreview>
               <ConfirmDownload href={`/admin/reports/exam/${examId}/csv?method=${method}`} className={btnGhost} what="el CSV del ranking"><Download className="h-4 w-4" aria-hidden="true" /> CSV</ConfirmDownload>
             </div>
           )}

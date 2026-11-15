@@ -7,7 +7,7 @@ import { slug } from "@/lib/csv";
 import { logAction } from "@/lib/audit";
 
 
-export async function GET(_req: Request, ctx: { params: Promise<{ sessionId: string }> }) {
+export async function GET(req: Request, ctx: { params: Promise<{ sessionId: string }> }) {
   if (!(await hasPermission("results:export"))) return new Response("Tu rol no puede exportar informes.", { status: 403 });
   const { sessionId } = await ctx.params;
   const d = await getResultDetail(sessionId);
@@ -37,11 +37,12 @@ export async function GET(_req: Request, ctx: { params: Promise<{ sessionId: str
     },
     admin?.name || admin?.email || "ASIGBO",
   );
-  await logAction({ action: "export.pdf_candidate", entityType: "session", entityId: sessionId, summary: `Descargó el informe PDF de ${d.candidate.fullName} en «${d.exam.title}»` });
+  const download = new URL(req.url).searchParams.get("download") === "1";
+  await logAction({ action: download ? "export.pdf_candidate" : "view.pdf_candidate", entityType: "session", entityId: sessionId, summary: `${download ? "Descargó" : "Visualizó"} el informe PDF de ${d.candidate.fullName} en «${d.exam.title}»` });
   return new Response(new Uint8Array(pdf), {
     headers: {
       "Content-Type": "application/pdf",
-      "Content-Disposition": `attachment; filename="informe-${slug(d.candidate.fullName)}.pdf"`,
+      "Content-Disposition": `${download ? "attachment" : "inline"}; filename="informe-${slug(d.candidate.fullName)}.pdf"`,
       "Cache-Control": "private, no-store",
     },
   });

@@ -1,3 +1,4 @@
+import PdfPreview from "@/components/admin/PdfPreview";
 import { Suspense } from "react";
 import Link from "next/link";
 import type { Metadata } from "next";
@@ -41,7 +42,7 @@ async function Detail({ params }: { params: Promise<{ sessionId: string }> }) {
           </div>
           <div className="flex flex-col items-end gap-3">
             <span className={`rounded-full px-3 py-1 text-sm font-semibold ${st.cls}`}>{st.label}</span>
-            {canExport && <a href={`/admin/reports/candidate/${d.id}/pdf`} className={btnPrimary}><FileText className="h-4 w-4" aria-hidden="true" /> Informe PDF</a>}
+            {canExport && <PdfPreview href={`/admin/reports/candidate/${d.id}/pdf`} title={`Informe de ${d.candidate.fullName}`} className={btnPrimary}><FileText className="h-4 w-4" aria-hidden="true" /> Informe PDF</PdfPreview>}
           </div>
         </div>
         <dl className="mt-5 grid gap-3 sm:grid-cols-4">

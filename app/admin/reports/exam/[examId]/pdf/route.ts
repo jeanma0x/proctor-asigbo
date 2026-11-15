@@ -20,11 +20,12 @@ export async function GET(req: Request, ctx: { params: Promise<{ examId: string 
   const enabled = groups.reduce((n, g) => n + g._count._all, 0);
   const started = groups.filter((g) => g.status !== "NOT_STARTED").reduce((n, g) => n + g._count._all, 0);
   const pdf = await buildExamReport({ exam: data.exam, method, result: data.result, enabled, started }, admin?.name || admin?.email || "ASIGBO");
-  await logAction({ action: "export.pdf_exam", entityType: "exam", entityId: examId, summary: `Descargó el informe PDF grupal de «${data.exam.title}»` });
+  const download = new URL(req.url).searchParams.get("download") === "1";
+  await logAction({ action: download ? "export.pdf_exam" : "view.pdf_exam", entityType: "exam", entityId: examId, summary: `${download ? "Descargó" : "Visualizó"} el informe PDF grupal de «${data.exam.title}»` });
   return new Response(new Uint8Array(pdf), {
     headers: {
       "Content-Type": "application/pdf",
-      "Content-Disposition": `attachment; filename="informe-${slug(data.exam.title)}.pdf"`,
+      "Content-Disposition": `${download ? "attachment" : "inline"}; filename="informe-${slug(data.exam.title)}.pdf"`,
       "Cache-Control": "private, no-store",
     },
   });
