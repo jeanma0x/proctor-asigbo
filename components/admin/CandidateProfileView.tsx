@@ -6,6 +6,7 @@ import { useRouter } from "next/navigation";
 import { AlertCircle, FileText, Loader2, Pencil, Send, Trash2 } from "lucide-react";
 import { addNote, deleteNote, updateCandidate, type CandidateProfile } from "@/actions/candidates";
 import { setDecision } from "@/actions/ranking";
+import ConfirmDialog from "@/components/admin/ConfirmDialog";
 import { btnGhost, btnPrimary, card, inputCls } from "@/components/admin/ui";
 import { DECISION } from "@/components/admin/CandidatesExplorer";
 import { fmtDateTime, initials } from "@/lib/format";
@@ -28,6 +29,7 @@ export default function CandidateProfileView({ p, meId, isSuper, canDecide, canG
   const [email, setEmail] = useState(p.email);
   const [note, setNote] = useState("");
 
+  const [askNote, setAskNote] = useState<string | null>(null);
   const run = (fn: () => Promise<{ ok: boolean; error?: string }>, after?: () => void) => {
     setError(null);
     startTransition(async () => {
@@ -132,7 +134,7 @@ export default function CandidateProfileView({ p, meId, isSuper, canDecide, canG
               <li key={n.id} className="rounded-xl bg-slate-50 p-4">
                 <div className="flex items-start justify-between gap-3">
                   <p className="text-xs text-slate-500"><strong className="text-slate-700">{n.authorName}</strong> · {fmtDateTime(n.createdAt)}</p>
-                  {canGrade && (n.authorId === meId || isSuper) && <button type="button" disabled={pending} onClick={() => run(() => deleteNote(n.id))} aria-label="Borrar nota" className="cursor-pointer rounded-lg p-1 text-slate-400 hover:bg-red-50 hover:text-red-600"><Trash2 className="h-4 w-4" aria-hidden="true" /></button>}
+                  {canGrade && (n.authorId === meId || isSuper) && <button type="button" disabled={pending} onClick={() => setAskNote(n.id)} aria-label="Borrar nota" className="cursor-pointer rounded-lg p-1 text-slate-400 hover:bg-red-50 hover:text-red-600"><Trash2 className="h-4 w-4" aria-hidden="true" /></button>}
                 </div>
                 <p className="mt-1 whitespace-pre-wrap text-sm text-slate-800">{n.body}</p>
               </li>
@@ -155,6 +157,7 @@ export default function CandidateProfileView({ p, meId, isSuper, canDecide, canG
           </ol>
         )}
       </section>
+      <ConfirmDialog open={!!askNote} title="Borrar nota" description="La nota se elimina del historial de esta persona y queda registrada en la bitácora." confirmLabel="Borrar nota" tone="danger" busy={pending} onCancel={() => setAskNote(null)} onConfirm={() => askNote && run(() => deleteNote(askNote), () => setAskNote(null))} />
     </div>
   );
 }

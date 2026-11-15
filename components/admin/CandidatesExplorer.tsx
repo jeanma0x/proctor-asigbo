@@ -1,9 +1,10 @@
 "use client";
 
+import { SkeletonRows } from "@/components/admin/skeletons";
 import { useState } from "react";
 import Link from "next/link";
 import useSWR from "swr";
-import { ChevronRight, Loader2, MessageSquare, Search } from "lucide-react";
+import { ChevronRight, MessageSquare, Search } from "lucide-react";
 import { listCandidates, type CandidateFilters } from "@/actions/candidates";
 import { card, inputCls } from "@/components/admin/ui";
 import { initials } from "@/lib/format";
@@ -64,7 +65,7 @@ export default function CandidatesExplorer() {
               </tr>
             </thead>
             <tbody>
-              {isLoading && <tr><td colSpan={6} className="px-6 py-12 text-center text-slate-400"><Loader2 className="mx-auto h-5 w-5 animate-spin" aria-hidden="true" /></td></tr>}
+              {isLoading && <SkeletonRows cols={6} />}
               {!isLoading && rows.length === 0 && <tr><td colSpan={6} className="px-6 py-12 text-center text-slate-500">No hay candidatos con estos filtros.</td></tr>}
               {rows.map((c) => (
                 <tr key={c.id} className="border-t border-slate-100 hover:bg-slate-50/70">

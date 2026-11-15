@@ -1,11 +1,14 @@
 "use client";
 
-import { useState } from "react";
+import { SkeletonRows } from "@/components/admin/skeletons";
+import { useMemo, useState } from "react";
 import Link from "next/link";
 import useSWR from "swr";
 import { useSearchParams } from "next/navigation";
-import { ChevronRight, Download, FileText, Loader2, Search, Trophy } from "lucide-react";
+import { ArrowDown, ArrowUp, ChevronRight, Download, FileText, Search, Trophy } from "lucide-react";
 import { exportResultsCsv, listResults, type ResultFilters } from "@/actions/results";
+import ConfirmDownload from "@/components/admin/ConfirmDownload";
+import ConfirmDialog from "@/components/admin/ConfirmDialog";
 import { btnGhost, card, inputCls } from "@/components/admin/ui";
 import { fmtDateTime } from "@/lib/format";
 import { STATUS_LABEL } from "@/lib/labels";
@@ -16,6 +19,7 @@ export default function ResultsExplorer({ canExport }: { canExport: boolean }) {
   const [examId, setExamId] = useState("");
   const [status, setStatus] = useState<NonNullable<ResultFilters["status"]> | "">("");
   const [q, setQ] = useState("");
+  const [askCsv, setAskCsv] = useState(false);
   const [exportError, setExportError] = useState<string | null>(null);
 
   const filters: ResultFilters = {
@@ -26,7 +30,23 @@ export default function ResultsExplorer({ canExport }: { canExport: boolean }) {
   };
   const { data, isLoading } = useSWR(["results", filters], () => listResults(filters), { keepPreviousData: true });
 
-  const rows = data?.rows ?? [];
+  type SortKey = "name" | "score" | "flags" | "date";
+  const [sort, setSort] = useState<{ key: SortKey; dir: 1 | -1 } | null>(null);
+  const toggleSort = (key: SortKey) => setSort((s) => (s?.key === key ? (s.dir === 1 ? { key, dir: -1 } : null) : { key, dir: key === "name" ? 1 : -1 }));
+  const rows = useMemo(() => {
+    const base = data?.rows ?? [];
+    if (!sort) return base;
+    const val = (r: (typeof base)[number]) =>
+      sort.key === "name" ? r.name.toLowerCase() : sort.key === "score" ? (r.score != null && r.maxScore ? r.score / r.maxScore : -1) : sort.key === "flags" ? r.flagCount : r.submittedAt ? new Date(r.submittedAt).getTime() : 0;
+    return [...base].sort((a, b) => (val(a) < val(b) ? -1 : val(a) > val(b) ? 1 : 0) * sort.dir);
+  }, [data, sort]);
+  const sortTh = (k: SortKey, cls: string, children: React.ReactNode) => (
+    <th key={k} className={cls} aria-sort={sort?.key === k ? (sort.dir === 1 ? "ascending" : "descending") : "none"}>
+      <button type="button" onClick={() => toggleSort(k)} className="inline-flex cursor-pointer items-center gap-1 font-semibold uppercase tracking-wide hover:text-slate-900">
+        {children}{sort?.key === k && (sort.dir === 1 ? <ArrowUp className="h-3 w-3" aria-hidden="true" /> : <ArrowDown className="h-3 w-3" aria-hidden="true" />)}
+      </button>
+    </th>
+  );
   const exams = (data?.exams ?? []).filter((e) => !convocatoriaId || e.convocatoriaId === convocatoriaId);
   const graded = rows.filter((r) => r.status === "SUBMITTED" && r.score != null && r.maxScore > 0);
   const avgPct = graded.length ? Math.round(graded.reduce((n, r) => n + (r.score! / r.maxScore) * 100, 0) / graded.length) : null;
@@ -66,7 +86,7 @@ export default function ResultsExplorer({ canExport }: { canExport: boolean }) {
             <input aria-label="Buscar candidato" value={q} onChange={(e) => setQ(e.target.value)} placeholder="Buscar por nombre o correo" className={`${inputCls} pl-9`} />
           </div>
           {canExport && (
-            <button type="button" onClick={download} disabled={rows.length === 0} className={btnGhost}>
+            <button type="button" onClick={() => setAskCsv(true)} disabled={rows.length === 0} className={btnGhost}>
               <Download className="h-4 w-4" aria-hidden="true" /> Exportar CSV
             </button>
           )}
@@ -75,12 +95,13 @@ export default function ResultsExplorer({ canExport }: { canExport: boolean }) {
           <div className="mt-3 flex flex-wrap items-center gap-2 border-t border-slate-100 pt-3">
             <span className="text-xs font-medium text-slate-500">Este examen:</span>
             <Link href={`/admin/ranking?e=${examId}`} className={`${btnGhost} !px-3 !py-1.5 text-xs`}><Trophy className="h-3.5 w-3.5" aria-hidden="true" /> Ranking y decisiones</Link>
-            {canExport && <a href={`/admin/reports/exam/${examId}/pdf`} className={`${btnGhost} !px-3 !py-1.5 text-xs`}><FileText className="h-3.5 w-3.5" aria-hidden="true" /> Informe grupal PDF</a>}
+            {canExport && <ConfirmDownload href={`/admin/reports/exam/${examId}/pdf`} className={`${btnGhost} !px-3 !py-1.5 text-xs`} what="el informe grupal PDF"><FileText className="h-3.5 w-3.5" aria-hidden="true" /> Informe grupal PDF</ConfirmDownload>}
           </div>
         )}
         {exportError && <p role="alert" className="mt-2 text-sm text-red-700">{exportError}</p>}
       </section>
 
+      <ConfirmDialog open={askCsv} title={`¿Exportar ${rows.length} registro(s) a CSV?`} description="Contiene datos personales de los aspirantes (en su mayoría menores de edad). La exportación queda registrada en la bitácora con tu nombre." confirmLabel="Sí, exportar" onCancel={() => setAskCsv(false)} onConfirm={() => { setAskCsv(false); void download(); }} />
       <div className="grid gap-4 sm:grid-cols-3">
         {[
           ["Registros", rows.length],
@@ -99,17 +120,17 @@ export default function ResultsExplorer({ canExport }: { canExport: boolean }) {
           <table className="w-full text-left text-sm">
             <thead className="bg-slate-50 text-xs uppercase tracking-wide text-slate-500">
               <tr>
-                <th className="px-6 py-3 font-semibold">Candidato</th>
+                {sortTh("name", "px-6 py-3 font-semibold", "Candidato")}
                 <th className="px-4 py-3 font-semibold">Examen</th>
                 <th className="px-4 py-3 font-semibold">Estado</th>
-                <th className="px-4 py-3 font-semibold">Puntaje</th>
-                <th className="px-4 py-3 font-semibold">Infracciones</th>
-                <th className="px-4 py-3 font-semibold">Entrega</th>
+                {sortTh("score", "px-4 py-3 font-semibold", "Puntaje")}
+                {sortTh("flags", "px-4 py-3 font-semibold", "Infracciones")}
+                {sortTh("date", "px-4 py-3 font-semibold", "Entrega")}
                 <th className="px-4 py-3"><span className="sr-only">Ver detalle</span></th>
               </tr>
             </thead>
             <tbody>
-              {isLoading && <tr><td colSpan={7} className="px-6 py-12 text-center text-slate-400"><Loader2 className="mx-auto h-5 w-5 animate-spin" aria-hidden="true" /></td></tr>}
+              {isLoading && <SkeletonRows cols={7} />}
               {!isLoading && rows.length === 0 && <tr><td colSpan={7} className="px-6 py-12 text-center text-slate-500">No hay resultados con estos filtros.</td></tr>}
               {rows.map((r) => {
                 const pct = r.score != null && r.maxScore ? Math.round((r.score / r.maxScore) * 100) : null;

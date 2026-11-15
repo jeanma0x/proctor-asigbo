@@ -1,6 +1,7 @@
 import { Suspense } from "react";
 import { redirect } from "next/navigation";
 import { ShieldAlert } from "lucide-react";
+import NavProgress from "@/components/admin/NavProgress";
 import AdminSidebar from "@/components/admin/AdminSidebar";
 import ChangePasswordForm from "@/components/admin/ChangePasswordForm";
 import { PageContainer, PageHeader } from "@/components/admin/ui";
@@ -17,6 +18,7 @@ export default async function AdminShell({ children }: { children: React.ReactNo
 
   return (
     <div className="flex min-h-screen flex-col bg-slate-50 md:flex-row">
+      <Suspense fallback={null}><NavProgress /></Suspense>
       <Suspense fallback={null}>
         <AdminSidebar user={{ name: admin.name, email: admin.email, role: admin.role }} />
       </Suspense>

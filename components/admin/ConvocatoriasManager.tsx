@@ -5,6 +5,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { AlertCircle, Archive, ArchiveRestore, CalendarPlus, ClipboardList, Loader2, Users } from "lucide-react";
 import { createConvocatoria, setConvocatoriaStatus, type ConvocatoriaRow } from "@/actions/convocatorias";
+import ConfirmDialog from "@/components/admin/ConfirmDialog";
 import { btnGhost, btnPrimary, card, inputCls } from "@/components/admin/ui";
 
 export default function ConvocatoriasManager({ rows, canManage }: { rows: ConvocatoriaRow[]; canManage: boolean }) {
@@ -14,6 +15,7 @@ export default function ConvocatoriasManager({ rows, canManage }: { rows: Convoc
   const [year, setYear] = useState(2027);
   const [description, setDescription] = useState("");
   const [error, setError] = useState<string | null>(null);
+  const [ask, setAsk] = useState<ConvocatoriaRow | null>(null);
 
   const run = (fn: () => Promise<{ ok: boolean; error?: string }>, after?: () => void) => {
     setError(null);
@@ -99,7 +101,7 @@ export default function ConvocatoriasManager({ rows, canManage }: { rows: Convoc
                 <Link href={`/admin/results?c=${c.id}`} className={btnGhost}><ClipboardList className="h-4 w-4" aria-hidden="true" /> Ver resultados</Link>
                 <Link href={`/admin/dashboard?c=${c.id}`} className={btnGhost}><Users className="h-4 w-4" aria-hidden="true" /> Dashboard</Link>
                 {canManage && (
-                  <button type="button" disabled={pending} onClick={() => run(() => setConvocatoriaStatus(c.id, c.status === "ACTIVE" ? "ARCHIVED" : "ACTIVE"))} className={btnGhost}>
+                  <button type="button" disabled={pending} onClick={() => setAsk(c)} className={btnGhost}>
                     {c.status === "ACTIVE" ? <Archive className="h-4 w-4" aria-hidden="true" /> : <ArchiveRestore className="h-4 w-4" aria-hidden="true" />}
                     {c.status === "ACTIVE" ? "Archivar" : "Reactivar"}
                   </button>
@@ -109,6 +111,12 @@ export default function ConvocatoriasManager({ rows, canManage }: { rows: Convoc
           );
         })}
       </div>
+      {ask && (
+        <ConfirmDialog open title={`${ask.status === "ACTIVE" ? "Archivar" : "Reactivar"} «${ask.name}»`}
+          description={ask.status === "ACTIVE" ? "Se conserva todo su historial y resultados. Solo dejará de ofrecerse al crear exámenes nuevos. Puedes reactivarla cuando quieras." : "Volverá a ofrecerse al crear exámenes."}
+          confirmLabel={ask.status === "ACTIVE" ? "Archivar" : "Reactivar"} busy={pending} onCancel={() => setAsk(null)}
+          onConfirm={() => run(() => setConvocatoriaStatus(ask.id, ask.status === "ACTIVE" ? "ARCHIVED" : "ACTIVE"), () => setAsk(null))} />
+      )}
     </div>
   );
 }

@@ -10,6 +10,7 @@ import {
 } from "lucide-react";
 import { generateSessions, listExamSessions, removeSession, resetSession, sendInvitations, type ExamSessionRow } from "@/actions/sessions";
 import { publishExam } from "@/actions/exam";
+import ConfirmDialog from "@/components/admin/ConfirmDialog";
 import { btnGhost, btnPrimary, card, inputCls } from "@/components/admin/ui";
 import { parseCandidates } from "@/lib/parse-candidates";
 import { fmtDate, initials } from "@/lib/format";
@@ -53,6 +54,8 @@ export default function SessionGenerator({ exams, emailEnabled }: { exams: ExamO
   const [draftError, setDraftError] = useState<string | null>(null);
   const [tray, setTray] = useState<{ email: string; name: string }[]>([]);
   const [dragging, setDragging] = useState(false);
+  const [askSend, setAskSend] = useState(false);
+  const [askPublish, setAskPublish] = useState<string | null>(null);
   const [notice, setNotice] = useState<{ ok: boolean; text: string } | null>(null);
   const [copied, setCopied] = useState<string | null>(null);
   const [search, setSearch] = useState("");
@@ -266,7 +269,7 @@ export default function SessionGenerator({ exams, emailEnabled }: { exams: ExamO
               <p className="mt-1 text-xs text-amber-900">Borrador · {e.questionCount} preguntas · {e.durationMinutes} min</p>
               <button
                 type="button"
-                onClick={() => publish(e.id)}
+                onClick={() => setAskPublish(e.id)}
                 disabled={pending || e.questionCount === 0}
                 className="mt-3 inline-flex cursor-pointer items-center gap-1.5 rounded-lg bg-amber-600 px-3 py-1.5 text-xs font-semibold text-white transition-colors hover:bg-amber-700 disabled:cursor-not-allowed disabled:opacity-50"
               >
@@ -385,7 +388,7 @@ export default function SessionGenerator({ exams, emailEnabled }: { exams: ExamO
               <option value="TERMINATED">Cerrados</option>
             </select>
             {emailEnabled && (
-              <button type="button" disabled={pendingEmailIds.length === 0 || sendingIds.size > 0} onClick={() => sendEmails(pendingEmailIds)} className={btnPrimary}>
+              <button type="button" disabled={pendingEmailIds.length === 0 || sendingIds.size > 0} onClick={() => setAskSend(true)} className={btnPrimary}>
                 {sendingIds.size > 0 ? <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" /> : <Send className="h-4 w-4" aria-hidden="true" />}
                 Enviar a pendientes ({pendingEmailIds.length})
               </button>
@@ -497,6 +500,8 @@ export default function SessionGenerator({ exams, emailEnabled }: { exams: ExamO
           </table>
         </div>
       </section>
+      <ConfirmDialog open={askSend} title={`¿Enviar ${pendingEmailIds.length} correo(s) de invitación?`} description="Cada aspirante pendiente recibirá su enlace personal. Los que ya recibieron correo no se incluyen." confirmLabel={`Enviar ${pendingEmailIds.length} correo(s)`} onCancel={() => setAskSend(false)} onConfirm={() => { setAskSend(false); void sendEmails(pendingEmailIds); }} />
+      <ConfirmDialog open={!!askPublish} title="¿Publicar este examen?" description="Los aspirantes habilitados podrán presentarlo con su enlace. Tras iniciar, las preguntas quedan bloqueadas." confirmLabel="Publicar examen" onCancel={() => setAskPublish(null)} onConfirm={() => { const id = askPublish!; setAskPublish(null); publish(id); }} />
     </div>
   );
 }

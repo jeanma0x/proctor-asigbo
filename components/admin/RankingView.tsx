@@ -1,10 +1,12 @@
 "use client";
 
+import { SkeletonRows } from "@/components/admin/skeletons";
 import { useState, useTransition } from "react";
 import useSWR from "swr";
 import Link from "next/link";
 import { AlertCircle, Download, FileText, Flag, Info, Loader2 } from "lucide-react";
 import { applyShortlist, getRanking, setDecision, type RankingExam } from "@/actions/ranking";
+import ConfirmDownload from "@/components/admin/ConfirmDownload";
 import { btnGhost, btnPrimary, card, inputCls } from "@/components/admin/ui";
 import { METHOD_INFO, STRIKE_PENALTY, type RankMethod } from "@/lib/ranking";
 
@@ -56,8 +58,8 @@ export default function RankingView({ exams, canDecide, canExport, initialExamId
           </div>
           {canExport && examId && (
             <div className="flex gap-2">
-              <a href={`/admin/reports/exam/${examId}/pdf?method=${method}`} className={btnPrimary}><FileText className="h-4 w-4" aria-hidden="true" /> Informe PDF</a>
-              <a href={`/admin/reports/exam/${examId}/csv?method=${method}`} className={btnGhost}><Download className="h-4 w-4" aria-hidden="true" /> CSV</a>
+              <ConfirmDownload href={`/admin/reports/exam/${examId}/pdf?method=${method}`} className={btnPrimary} what="el informe PDF grupal"><FileText className="h-4 w-4" aria-hidden="true" /> Informe PDF</ConfirmDownload>
+              <ConfirmDownload href={`/admin/reports/exam/${examId}/csv?method=${method}`} className={btnGhost} what="el CSV del ranking"><Download className="h-4 w-4" aria-hidden="true" /> CSV</ConfirmDownload>
             </div>
           )}
         </div>
@@ -128,7 +130,7 @@ export default function RankingView({ exams, canDecide, canExport, initialExamId
               </tr>
             </thead>
             <tbody>
-              {isLoading && <tr><td colSpan={9} className="px-6 py-12 text-center text-slate-400"><Loader2 className="mx-auto h-5 w-5 animate-spin" aria-hidden="true" /></td></tr>}
+              {isLoading && <SkeletonRows cols={9} />}
               {r?.rows.map((x) => (
                 <tr key={x.sessionId} className="border-t border-slate-100 hover:bg-slate-50/70">
                   <td className="px-5 py-3 font-bold tabular-nums">{x.position}{x.tied && <span title="Empate en el índice: se desempató por infracciones, tiempo y hora de entrega" className="ml-1 cursor-help text-xs font-normal text-slate-400">≈</span>}</td>

@@ -1,6 +1,6 @@
 "use client";
 
-import { useRef, useState, useTransition } from "react";
+import { useEffect, useRef, useState, useTransition } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import Papa from "papaparse";
@@ -166,6 +166,14 @@ export default function ExamBuilder({ convocatorias, initial }: { convocatorias:
   };
 
   const [published, setPublished] = useState(false);
+  // Aviso al salir con cambios sin guardar (título o preguntas con contenido).
+  const dirty = !editing && !result?.ok && (title.trim() !== "" || questions.some((q) => q.text.trim() !== ""));
+  useEffect(() => {
+    if (!dirty) return;
+    const h = (e: BeforeUnloadEvent) => { e.preventDefault(); e.returnValue = ""; };
+    window.addEventListener("beforeunload", h);
+    return () => window.removeEventListener("beforeunload", h);
+  }, [dirty]);
   const [publishError, setPublishError] = useState<string | null>(null);
   const publishNow = (examId: string) => {
     setPublishError(null);

@@ -5,6 +5,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { AlertCircle, CalendarClock, Copy, Loader2, Lock, Pencil, Plus, Shuffle, Trash2 } from "lucide-react";
 import { deleteExam, duplicateExam, setExamStatus, type ExamListRow } from "@/actions/exams-admin";
+import ConfirmDialog from "@/components/admin/ConfirmDialog";
 import { btnGhost, btnPrimary, card, inputCls } from "@/components/admin/ui";
 import { fmtDate, fmtDateTime } from "@/lib/format";
 
@@ -22,6 +23,13 @@ export default function ExamsManager({ exams, convocatorias }: { exams: ExamList
   const [error, setError] = useState<string | null>(null);
   const [panel, setPanel] = useState<{ id: string; kind: "delete" | "duplicate" } | null>(null);
   const [target, setTarget] = useState("");
+  const [ask, setAsk] = useState<{ exam: ExamListRow; to: "DRAFT" | "PUBLISHED" | "CLOSED" } | null>(null);
+  const askText = (a: NonNullable<typeof ask>) => {
+    const e = a.exam;
+    if (a.to === "PUBLISHED") return { title: `${e.status === "CLOSED" ? "Reabrir" : "Publicar"} «${e.title}»`, label: e.status === "CLOSED" ? "Reabrir examen" : "Publicar examen", danger: false, body: `Los aspirantes habilitados podrán presentarlo con su enlace${e.opensAt || e.closesAt ? ", dentro de la ventana de fechas configurada" : ""}. Revisa que las preguntas y la duración (${e.durationMinutes} min) sean correctas: tras iniciar, las preguntas quedan bloqueadas.` };
+    if (a.to === "CLOSED") return { title: `Cerrar «${e.title}»`, label: "Cerrar examen", danger: true, body: `Nadie podrá iniciarlo ni continuarlo, incluso quienes lo estén presentando ahora.${e.started > 0 ? ` ${e.started} aspirante(s) ya lo iniciaron.` : ""} Podrás reabrirlo después.` };
+    return { title: `Volver «${e.title}» a borrador`, label: "Pasar a borrador", danger: true, body: "Los enlaces dejarán de funcionar hasta que lo publiques de nuevo." };
+  };
 
   const run = (fn: () => Promise<{ ok: boolean; error?: string }>) => {
     setError(null);
@@ -81,10 +89,10 @@ export default function ExamsManager({ exams, convocatorias }: { exams: ExamList
                       <div className="flex flex-wrap items-center justify-end gap-2">
                         <Link href={`/admin/exams/${e.id}/edit`} className={`${btnGhost} !px-3 !py-1.5 text-xs`}><Pencil className="h-3.5 w-3.5" aria-hidden="true" /> Editar</Link>
                         <button type="button" disabled={pending} onClick={() => { setPanel({ id: e.id, kind: "duplicate" }); setTarget(convocatorias[0]?.id ?? ""); }} className={`${btnGhost} !px-3 !py-1.5 text-xs`}><Copy className="h-3.5 w-3.5" aria-hidden="true" /> Duplicar</button>
-                        {e.status === "DRAFT" && <button type="button" disabled={pending} onClick={() => run(() => setExamStatus(e.id, "PUBLISHED"))} className={`${btnPrimary} !px-3 !py-1.5 text-xs`}>Publicar</button>}
-                        {e.status === "PUBLISHED" && <button type="button" disabled={pending} onClick={() => run(() => setExamStatus(e.id, "CLOSED"))} className={`${btnGhost} !px-3 !py-1.5 text-xs`}>Cerrar</button>}
-                        {e.status === "CLOSED" && <button type="button" disabled={pending} onClick={() => run(() => setExamStatus(e.id, "PUBLISHED"))} className={`${btnGhost} !px-3 !py-1.5 text-xs`}>Reabrir</button>}
-                        {e.status === "PUBLISHED" && !locked && <button type="button" disabled={pending} onClick={() => run(() => setExamStatus(e.id, "DRAFT"))} className={`${btnGhost} !px-3 !py-1.5 text-xs`}>A borrador</button>}
+                        {e.status === "DRAFT" && <button type="button" disabled={pending} onClick={() => setAsk({ exam: e, to: "PUBLISHED" })} className={`${btnPrimary} !px-3 !py-1.5 text-xs`}>Publicar</button>}
+                        {e.status === "PUBLISHED" && <button type="button" disabled={pending} onClick={() => setAsk({ exam: e, to: "CLOSED" })} className={`${btnGhost} !px-3 !py-1.5 text-xs`}>Cerrar</button>}
+                        {e.status === "CLOSED" && <button type="button" disabled={pending} onClick={() => setAsk({ exam: e, to: "PUBLISHED" })} className={`${btnGhost} !px-3 !py-1.5 text-xs`}>Reabrir</button>}
+                        {e.status === "PUBLISHED" && !locked && <button type="button" disabled={pending} onClick={() => setAsk({ exam: e, to: "DRAFT" })} className={`${btnGhost} !px-3 !py-1.5 text-xs`}>A borrador</button>}
                         <button type="button" onClick={() => setPanel({ id: e.id, kind: "delete" })} disabled={pending || locked} title={locked ? "Tiene candidatos que lo iniciaron: se conserva el histórico" : "Eliminar examen"} aria-label={`Eliminar ${e.title}`} className="cursor-pointer rounded-lg p-2 text-slate-500 transition-colors hover:bg-red-50 hover:text-red-600 disabled:cursor-not-allowed disabled:opacity-30">
                           <Trash2 className="h-4 w-4" aria-hidden="true" />
                         </button>
@@ -122,6 +130,10 @@ export default function ExamsManager({ exams, convocatorias }: { exams: ExamList
           </table>
         </div>
       </section>
+      {ask && (() => { const t = askText(ask); return (
+        <ConfirmDialog open title={t.title} description={t.body} confirmLabel={t.label} tone={t.danger ? "danger" : "primary"} busy={pending}
+          onCancel={() => setAsk(null)} onConfirm={() => run(async () => { const r = await setExamStatus(ask.exam.id, ask.to); if (r.ok) setAsk(null); return r; })} />
+      ); })()}
     </div>
   );
 }

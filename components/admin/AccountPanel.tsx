@@ -4,6 +4,7 @@ import { useState, type FormEvent } from "react";
 import { signOut } from "next-auth/react";
 import { CheckCircle2, Loader2, LogOut, Monitor, UserRound } from "lucide-react";
 import { signOutEverywhere, updateProfileName } from "@/actions/account";
+import ConfirmDialog from "@/components/admin/ConfirmDialog";
 import { btnGhost, btnPrimary, card, inputCls } from "@/components/admin/ui";
 import ChangePasswordForm from "@/components/admin/ChangePasswordForm";
 import { fmtDateTime, initials } from "@/lib/format";
@@ -25,6 +26,7 @@ export default function AccountPanel({ name, email, createdAt, lastLoginAt }: Pr
     setSaved(res.ok);
   }
 
+  const [askAll, setAskAll] = useState(false);
   async function closeAll() {
     setClosing(true);
     const res = await signOutEverywhere();
@@ -84,11 +86,12 @@ export default function AccountPanel({ name, email, createdAt, lastLoginAt }: Pr
             <p className="text-sm text-slate-600">¿Iniciaste sesión en un equipo ajeno? Ciérrala en todos los dispositivos.</p>
           </div>
         </div>
-        <button type="button" onClick={closeAll} disabled={closing} className={btnGhost}>
+        <button type="button" onClick={() => setAskAll(true)} disabled={closing} className={btnGhost}>
           {closing ? <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" /> : <LogOut className="h-4 w-4" aria-hidden="true" />}
           Cerrar en todos los dispositivos
         </button>
       </section>
+      <ConfirmDialog open={askAll} title="Cerrar sesión en todos los dispositivos" description="Se cerrará tu sesión aquí y en cualquier otro equipo donde hayas ingresado. Tendrás que iniciar sesión de nuevo." confirmLabel="Cerrar todas las sesiones" tone="danger" busy={closing} onCancel={() => setAskAll(false)} onConfirm={closeAll} />
     </div>
   );
 }

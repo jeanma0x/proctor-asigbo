@@ -53,6 +53,8 @@ export async function createConvocatoria(input: { name: string; year: number; de
   if (!name) return { ok: false, error: "El nombre es obligatorio." };
   if (!Number.isFinite(year) || year < 2000 || year > 2100) return { ok: false, error: "El año no es válido." };
   try {
+    const dup = await prisma.convocatoria.findFirst({ where: { year, name: { equals: name, mode: "insensitive" } }, select: { id: true } });
+    if (dup) return { ok: false, error: `Ya existe una convocatoria «${name}» para ${year}.` };
     await prisma.convocatoria.create({ data: { name, year, description: input.description?.trim().slice(0, 500) || null } });
     await logAction({ action: "convocatoria.create", entityType: "convocatoria", summary: `Creó la convocatoria «${name}» (${year})` });
     revalidatePath("/admin/convocatorias");

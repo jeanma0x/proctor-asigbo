@@ -1,5 +1,6 @@
 "use client";
 
+import { SkeletonRows } from "@/components/admin/skeletons";
 import { useState, useTransition } from "react";
 import useSWR from "swr";
 import { Loader2, Search } from "lucide-react";
@@ -67,7 +68,7 @@ export default function AuditExplorer() {
               <tr><th className="px-6 py-3 font-semibold">Fecha</th><th className="px-4 py-3 font-semibold">Persona</th><th className="px-4 py-3 font-semibold">Tipo</th><th className="px-4 py-3 font-semibold">Detalle</th></tr>
             </thead>
             <tbody>
-              {isLoading && <tr><td colSpan={4} className="px-6 py-12 text-center text-slate-400"><Loader2 className="mx-auto h-5 w-5 animate-spin" aria-hidden="true" /></td></tr>}
+              {isLoading && <SkeletonRows cols={4} />}
               {!isLoading && rows.length === 0 && <tr><td colSpan={4} className="px-6 py-12 text-center text-slate-500">No hay registros con estos filtros.</td></tr>}
               {rows.map((r) => {
                 const cat = r.action.split(".")[0];
