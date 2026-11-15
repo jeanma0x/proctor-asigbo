@@ -157,19 +157,11 @@ export default function ExamBuilder() {
   const totalPoints = questions.reduce((a, q) => a + (q.points || 0), 0);
 
   return (
-    <div className="mx-auto max-w-4xl px-4 py-10">
-      <header className="mb-8">
-        <p className="text-xs font-semibold uppercase tracking-widest text-blue-600">
-          ASIGBO Proctoring · Admin
-        </p>
-        <h1 className="mt-1 text-3xl font-bold tracking-tight">Exam Builder</h1>
-        <p className="mt-1 text-slate-500">Configura el examen y agrega preguntas manualmente o por CSV.</p>
-      </header>
-
+    <div className="max-w-4xl">
       {/* Configuración general */}
-      <section className="mb-6 rounded-2xl border border-slate-200 bg-white p-6 shadow-lg">
+      <section className="mb-6 rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
         <h2 className="mb-4 flex items-center gap-2 text-lg font-semibold">
-          <Clock className="h-5 w-5 text-blue-600" /> Configuración del examen
+          <Clock className="h-5 w-5 text-asigbo-blue" /> Configuración del examen
         </h2>
         <div className="grid gap-4 sm:grid-cols-3">
           <label className="sm:col-span-2">
@@ -195,7 +187,7 @@ export default function ExamBuilder() {
       </section>
 
       {/* Selector de modo */}
-      <div className="mb-6 inline-flex rounded-2xl border border-slate-200 bg-white p-1 shadow-lg">
+      <div className="mb-6 inline-flex rounded-2xl border border-slate-200 bg-white p-1 shadow-sm">
         {(
           [
             ["manual", "Manual", ListChecks],
@@ -221,7 +213,7 @@ export default function ExamBuilder() {
       {mode === "manual" ? (
         <section className="space-y-6">
           {questions.map((q, idx) => (
-            <article key={q.id} className="rounded-2xl border border-slate-200 bg-white p-8 shadow-lg">
+            <article key={q.id} className="rounded-2xl border border-slate-200 bg-white p-8 shadow-sm">
               <div className="mb-4 flex items-center justify-between">
                 <span className="rounded-full bg-blue-50 px-3 py-1 text-sm font-semibold text-blue-700">
                   Pregunta {idx + 1}
@@ -326,7 +318,7 @@ export default function ExamBuilder() {
                   <button
                     type="button"
                     onClick={() => updateQuestion(q.id, { options: [...q.options, newOption()] })}
-                    className="mt-1 flex items-center gap-1 text-sm font-medium text-blue-600 hover:text-blue-800"
+                    className="mt-1 flex items-center gap-1 text-sm font-medium text-asigbo-blue hover:text-blue-800"
                   >
                     <Plus className="h-4 w-4" /> Agregar opción
                   </button>
@@ -342,7 +334,7 @@ export default function ExamBuilder() {
           <button
             type="button"
             onClick={() => setQuestions((qs) => [...qs, newQuestion()])}
-            className="flex w-full items-center justify-center gap-2 rounded-xl border-2 border-dashed border-slate-300 py-4 text-sm font-medium text-slate-500 transition hover:border-blue-400 hover:text-blue-600"
+            className="flex w-full items-center justify-center gap-2 rounded-xl border-2 border-dashed border-slate-300 py-4 text-sm font-medium text-slate-500 transition hover:border-blue-400 hover:text-asigbo-blue"
           >
             <Plus className="h-4 w-4" /> Agregar pregunta
           </button>
@@ -362,9 +354,9 @@ export default function ExamBuilder() {
           </div>
         </section>
       ) : (
-        <section className="rounded-2xl border border-slate-200 bg-white p-6 shadow-lg">
+        <section className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
           <h2 className="mb-1 flex items-center gap-2 text-lg font-semibold">
-            <Upload className="h-5 w-5 text-blue-600" /> Importar desde CSV
+            <Upload className="h-5 w-5 text-asigbo-blue" /> Importar desde CSV
           </h2>
           <p className="mb-4 text-sm text-slate-500">
             Columnas requeridas:{" "}
@@ -439,7 +431,7 @@ export default function ExamBuilder() {
           {result.ok ? <CheckCircle2 className="mt-0.5 h-5 w-5" /> : <AlertCircle className="mt-0.5 h-5 w-5" />}
           <span>
             {result.ok
-              ? `Examen creado en estado DRAFT con ${result.questionCount} pregunta(s). ID: ${result.examId}`
+              ? `Examen guardado como borrador con ${result.questionCount} pregunta(s). Publícalo en «Enlaces de Acceso» para habilitar aspirantes.`
               : result.error}
           </span>
         </div>

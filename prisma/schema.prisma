@@ -122,6 +122,8 @@ model CandidateSession {
   score       Float?
   /// Contador denormalizado de incidencias para el dashboard en vivo
   flagCount   Int           @default(0)
+  /// Última vez que se envió la invitación por correo
+  emailSentAt DateTime?
   createdAt   DateTime      @default(now())
   updatedAt   DateTime      @updatedAt
 
@@ -166,8 +168,25 @@ model AuditLog {
 
 /// Administradores de la Junta Directiva (acceso al panel /admin)
 model AdminUser {
-  id           String   @id @default(cuid())
-  email        String   @unique
-  passwordHash String
-  createdAt    DateTime @default(now())
+  id                 String    @id @default(cuid())
+  email              String    @unique
+  name               String?
+  passwordHash       String
+  /// Se incrementa al cambiar/restablecer la contraseña o cerrar sesiones: invalida los JWT emitidos antes.
+  tokenVersion       Int       @default(0)
+  /// true cuando la contraseña es temporal (usuario nuevo o restablecida por otro admin).
+  mustChangePassword Boolean   @default(false)
+  lastLoginAt        DateTime?
+  createdAt          DateTime  @default(now())
+}
+
+/// Intentos fallidos de login (límite de intentos por correo e IP; sirve en entornos serverless).
+model LoginAttempt {
+  id        String   @id @default(cuid())
+  email     String
+  ip        String
+  createdAt DateTime @default(now())
+
+  @@index([email, createdAt])
+  @@index([ip, createdAt])
 }

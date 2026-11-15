@@ -1,11 +1,14 @@
 import { Suspense } from "react";
 import type { Metadata } from "next";
+import { KeyRound } from "lucide-react";
 import { prisma } from "@/lib/prisma";
+import { emailConfigured } from "@/lib/email";
 import SessionGenerator from "@/components/admin/SessionGenerator";
+import { PageContainer, PageHeader } from "@/components/admin/ui";
 
 export const metadata: Metadata = {
   title: "Enlaces de acceso · ASIGBO Proctoring",
-  description: "Genera enlaces mágicos de examen para los aspirantes.",
+  description: "Habilita aspirantes y envíales su enlace personal de examen.",
 };
 
 async function SessionsContent() {
@@ -16,6 +19,7 @@ async function SessionsContent() {
   });
   return (
     <SessionGenerator
+      emailEnabled={emailConfigured()}
       exams={exams.map((e) => ({
         id: e.id,
         title: e.title,
@@ -29,10 +33,16 @@ async function SessionsContent() {
 
 export default function SessionsPage() {
   return (
-    <main className="min-h-screen bg-slate-50 text-slate-900">
-      <Suspense fallback={<p className="p-10 text-slate-400">Cargando…</p>}>
+    <PageContainer>
+      <PageHeader
+        icon={KeyRound}
+        eyebrow="Gestión"
+        title="Enlaces de acceso"
+        description="Habilita aspirantes y envíales su enlace personal por correo o WhatsApp."
+      />
+      <Suspense fallback={<p className="text-sm text-slate-500">Cargando…</p>}>
         <SessionsContent />
       </Suspense>
-    </main>
+    </PageContainer>
   );
 }

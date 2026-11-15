@@ -9,7 +9,8 @@ export async function proxy(request: NextRequest) {
 
   if (pathname === "/admin/login") {
     // Si ya hay sesión, no tiene sentido mostrar el login.
-    if (token) return NextResponse.redirect(new URL("/admin/exam-builder", request.url));
+    // `expired` = la cookie existe pero el servidor la invalidó: no redirigir (evita un bucle).
+    if (token && !request.nextUrl.searchParams.has("expired")) return NextResponse.redirect(new URL("/admin/exam-builder", request.url));
     return NextResponse.next();
   }
 

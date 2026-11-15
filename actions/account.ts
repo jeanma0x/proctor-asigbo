@@ -1,29 +1,25 @@
 "use server";
 
 import bcrypt from "bcryptjs";
-import { getServerSession } from "next-auth";
-import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
+import { getAdmin } from "@/lib/require-admin";
+import { passwordIssue } from "@/lib/password";
 
-export type ChangePasswordResult = { ok: true } | { ok: false; error: string };
+export type ActionResult = { ok: true } | { ok: false; error: string };
 
-/** Reglas de contraseña nueva; devuelve el mensaje de error o null si es válida. */
-function passwordIssue(pw: string): string | null {
-  if (pw.length < 10) return "La nueva contraseña debe tener al menos 10 caracteres.";
-  if (pw.length > 72) return "La nueva contraseña no puede superar 72 caracteres.";
-  if (!/[a-z]/.test(pw) || !/[A-Z]/.test(pw) || !/\d/.test(pw))
-    return "Debe incluir mayúsculas, minúsculas y números.";
-  return null;
-}
+const SESSION_EXPIRED = "Sesión expirada. Inicia sesión de nuevo.";
 
+/**
+ * Cambia la contraseña del administrador actual. Incrementa tokenVersion, lo que invalida TODAS
+ * las sesiones abiertas (incluida esta): el cliente debe cerrar sesión y volver a ingresar.
+ */
 export async function changePassword(
   currentPassword: string,
   newPassword: string,
   confirmPassword: string,
-): Promise<ChangePasswordResult> {
-  const session = await getServerSession(authOptions);
-  const email = session?.user?.email;
-  if (!email) return { ok: false, error: "Sesión expirada. Inicia sesión de nuevo." };
+): Promise<ActionResult> {
+  const admin = await getAdmin(); // permite mustChangePassword: es justo el caso de uso
+  if (!admin) return { ok: false, error: SESSION_EXPIRED };
 
   if (!currentPassword || !newPassword) return { ok: false, error: "Completa todos los campos." };
   if (newPassword !== confirmPassword) return { ok: false, error: "La confirmación no coincide." };
@@ -32,17 +28,37 @@ export async function changePassword(
   if (issue) return { ok: false, error: issue };
 
   try {
-    const admin = await prisma.adminUser.findUnique({ where: { email } });
-    if (!admin || !(await bcrypt.compare(currentPassword, admin.passwordHash)))
+    const row = await prisma.adminUser.findUnique({ where: { id: admin.id }, select: { passwordHash: true } });
+    if (!row || !(await bcrypt.compare(currentPassword, row.passwordHash)))
       return { ok: false, error: "La contraseña actual es incorrecta." };
 
     await prisma.adminUser.update({
       where: { id: admin.id },
-      data: { passwordHash: await bcrypt.hash(newPassword, 12) },
+      data: {
+        passwordHash: await bcrypt.hash(newPassword, 12),
+        mustChangePassword: false,
+        tokenVersion: { increment: 1 },
+      },
     });
     return { ok: true };
   } catch (e) {
     console.error(e);
     return { ok: false, error: "No se pudo actualizar la contraseña." };
   }
+}
+
+export async function updateProfileName(name: string): Promise<ActionResult> {
+  const admin = await getAdmin();
+  if (!admin || admin.mustChangePassword) return { ok: false, error: SESSION_EXPIRED };
+  const clean = name.trim().replace(/\s+/g, " ").slice(0, 80);
+  await prisma.adminUser.update({ where: { id: admin.id }, data: { name: clean || null } });
+  return { ok: true };
+}
+
+/** Invalida todas las sesiones abiertas de este usuario (otros dispositivos y esta). */
+export async function signOutEverywhere(): Promise<ActionResult> {
+  const admin = await getAdmin();
+  if (!admin) return { ok: false, error: SESSION_EXPIRED };
+  await prisma.adminUser.update({ where: { id: admin.id }, data: { tokenVersion: { increment: 1 } } });
+  return { ok: true };
 }

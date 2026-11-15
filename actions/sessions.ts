@@ -3,6 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { prisma } from "@/lib/prisma";
 import { isAdmin, UNAUTHORIZED } from "@/lib/require-admin";
+import { appBaseUrl, emailConfigured, sendInvitationEmail } from "@/lib/email";
 import type { CandidateInput } from "@/lib/parse-candidates";
 
 export type GeneratedSession = {
@@ -92,5 +93,102 @@ export async function generateSessions(examId: string, candidates: CandidateInpu
   } catch (e) {
     console.error(e);
     return { ok: false, error: "No se pudieron generar las sesiones." };
+  }
+}
+
+export type ExamSessionRow = {
+  sessionId: string;
+  name: string;
+  email: string;
+  status: "NOT_STARTED" | "IN_PROGRESS" | "SUBMITTED" | "TERMINATED";
+  flagCount: number;
+  score: number | null;
+  emailSentAt: string | null;
+  path: string;
+};
+
+/** Todos los aspirantes con acceso a un examen (para la tabla persistente de «Enlaces de acceso»). */
+export async function listExamSessions(examId: string): Promise<ExamSessionRow[]> {
+  if (!(await isAdmin())) return [];
+  const rows = await prisma.candidateSession.findMany({
+    where: { examId },
+    orderBy: { createdAt: "desc" },
+    take: 1000,
+    select: {
+      id: true,
+      status: true,
+      flagCount: true,
+      score: true,
+      emailSentAt: true,
+      candidate: { select: { fullName: true, email: true } },
+    },
+  });
+  return rows.map((r) => ({
+    sessionId: r.id,
+    name: r.candidate.fullName,
+    email: r.candidate.email,
+    status: r.status,
+    flagCount: r.flagCount,
+    score: r.score,
+    emailSentAt: r.emailSentAt?.toISOString() ?? null,
+    path: `/exam/${examId}?session=${r.id}`,
+  }));
+}
+
+export type SendResult =
+  | { ok: true; sent: number; failed: { email: string; error: string }[] }
+  | { ok: false; error: string };
+
+const MAX_EMAILS_PER_CALL = 100;
+const EMAIL_CONCURRENCY = 5;
+
+/** Envía por correo (SMTP) la invitación con el enlace personal a las sesiones indicadas. */
+export async function sendInvitations(examId: string, sessionIds: string[]): Promise<SendResult> {
+  if (!(await isAdmin())) return { ok: false, error: UNAUTHORIZED };
+  if (!emailConfigured())
+    return { ok: false, error: "El envío por correo no está configurado (faltan variables SMTP en el servidor)." };
+  const ids = [...new Set(sessionIds ?? [])].slice(0, MAX_EMAILS_PER_CALL);
+  if (ids.length === 0) return { ok: false, error: "No hay aspirantes seleccionados." };
+
+  try {
+    const sessions = await prisma.candidateSession.findMany({
+      where: { id: { in: ids }, examId, status: { in: ["NOT_STARTED", "IN_PROGRESS"] }, exam: { status: "PUBLISHED" } },
+      select: {
+        id: true,
+        candidate: { select: { fullName: true, email: true } },
+        exam: { select: { title: true, durationMinutes: true } },
+      },
+    });
+    if (sessions.length === 0) return { ok: false, error: "Ningún aspirante elegible (examen no publicado o sesión finalizada)." };
+
+    const base = appBaseUrl();
+    const sentIds: string[] = [];
+    const failed: { email: string; error: string }[] = [];
+    for (let i = 0; i < sessions.length; i += EMAIL_CONCURRENCY) {
+      await Promise.all(
+        sessions.slice(i, i + EMAIL_CONCURRENCY).map(async (s) => {
+          try {
+            await sendInvitationEmail({
+              to: s.candidate.email,
+              name: s.candidate.fullName,
+              examTitle: s.exam.title,
+              durationMinutes: s.exam.durationMinutes,
+              link: `${base}/exam/${examId}?session=${s.id}`,
+            });
+            sentIds.push(s.id);
+          } catch (e) {
+            console.error("email", s.candidate.email, e);
+            failed.push({ email: s.candidate.email, error: "El servidor de correo rechazó el envío." });
+          }
+        }),
+      );
+    }
+    if (sentIds.length) {
+      await prisma.candidateSession.updateMany({ where: { id: { in: sentIds } }, data: { emailSentAt: new Date() } });
+    }
+    return { ok: true, sent: sentIds.length, failed };
+  } catch (e) {
+    console.error(e);
+    return { ok: false, error: "No se pudieron enviar los correos." };
   }
 }

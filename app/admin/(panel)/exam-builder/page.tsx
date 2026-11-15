@@ -1,15 +1,23 @@
 import type { Metadata } from "next";
+import { ClipboardList } from "lucide-react";
 import ExamBuilder from "@/components/admin/ExamBuilder";
+import { PageContainer, PageHeader } from "@/components/admin/ui";
 
 export const metadata: Metadata = {
-  title: "Exam Builder · ASIGBO Proctoring",
+  title: "Constructor de exámenes · ASIGBO Proctoring",
   description: "Crea exámenes de beca manualmente o mediante carga masiva CSV.",
 };
 
 export default function ExamBuilderPage() {
   return (
-    <main className="min-h-screen bg-slate-50 text-slate-900">
+    <PageContainer>
+      <PageHeader
+        icon={ClipboardList}
+        eyebrow="Gestión"
+        title="Constructor de exámenes"
+        description="Configura el examen y agrega preguntas manualmente o por carga masiva CSV."
+      />
       <ExamBuilder />
-    </main>
+    </PageContainer>
   );
 }

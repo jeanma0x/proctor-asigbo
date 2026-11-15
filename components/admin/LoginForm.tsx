@@ -3,7 +3,7 @@
 import { useState, type FormEvent, type KeyboardEvent } from "react";
 import { signIn } from "next-auth/react";
 import { useSearchParams } from "next/navigation";
-import { AlertCircle, Eye, EyeOff, Loader2, Lock, Mail } from "lucide-react";
+import { AlertCircle, CheckCircle2, Eye, EyeOff, Info, Loader2, Lock, Mail } from "lucide-react";
 
 const inputClass =
   "block w-full rounded-xl border border-slate-300 bg-white py-3 pl-11 text-sm text-slate-900 outline-none transition-colors placeholder:text-slate-400 focus:border-asigbo-blue focus:ring-2 focus:ring-asigbo-blue/30";
@@ -36,7 +36,11 @@ export default function LoginForm() {
         redirect: false,
       });
       if (!res || res.error) {
-        setError("Correo o contraseña incorrectos.");
+        setError(
+          res?.error === "TOO_MANY_ATTEMPTS"
+            ? "Demasiados intentos fallidos. Espera 15 minutos e inténtalo de nuevo."
+            : "Correo o contraseña incorrectos.",
+        );
         setLoading(false);
         return;
       }
@@ -50,6 +54,18 @@ export default function LoginForm() {
 
   return (
     <form onSubmit={onSubmit} className="space-y-5" noValidate>
+      {params.has("changed") && !error && (
+        <div role="status" className="flex items-start gap-2 rounded-xl border border-green-200 bg-green-50 px-3 py-2.5 text-sm text-green-800">
+          <CheckCircle2 className="mt-0.5 h-4 w-4 shrink-0" aria-hidden="true" />
+          <span>Sesión cerrada por seguridad. Ingresa con tus credenciales actualizadas.</span>
+        </div>
+      )}
+      {params.has("expired") && !error && (
+        <div role="status" className="flex items-start gap-2 rounded-xl border border-blue-200 bg-blue-50 px-3 py-2.5 text-sm text-blue-800">
+          <Info className="mt-0.5 h-4 w-4 shrink-0" aria-hidden="true" />
+          <span>Tu sesión expiró o fue cerrada. Inicia sesión de nuevo.</span>
+        </div>
+      )}
       {error && (
         <div role="alert" className="flex items-start gap-2 rounded-xl border border-red-200 bg-red-50 px-3 py-2.5 text-sm text-red-700">
           <AlertCircle className="mt-0.5 h-4 w-4 shrink-0" aria-hidden="true" />
