@@ -1,14 +1,14 @@
 "use client";
 
-import { useRef, useState, useTransition, type ClipboardEvent, type DragEvent, type KeyboardEvent } from "react";
+import { Fragment, useRef, useState, useTransition, type ClipboardEvent, type DragEvent, type KeyboardEvent } from "react";
 import Link from "next/link";
 import useSWR from "swr";
 import { useRouter } from "next/navigation";
 import {
   AlertCircle, Check, CheckCircle2, Copy, Download, FileUp, Info, Link2, Loader2, Mail, MessageCircle,
-  Plus, Rocket, Search, Send, UserPlus, X,
+  Plus, RotateCcw, Rocket, Search, Send, Trash2, UserPlus, X,
 } from "lucide-react";
-import { generateSessions, listExamSessions, sendInvitations, type ExamSessionRow } from "@/actions/sessions";
+import { generateSessions, listExamSessions, removeSession, resetSession, sendInvitations, type ExamSessionRow } from "@/actions/sessions";
 import { publishExam } from "@/actions/exam";
 import { btnGhost, btnPrimary, card, inputCls } from "@/components/admin/ui";
 import { parseCandidates } from "@/lib/parse-candidates";
@@ -59,6 +59,7 @@ export default function SessionGenerator({ exams, emailEnabled }: { exams: ExamO
   const [filter, setFilter] = useState<"ALL" | "PENDING_EMAIL" | ExamSessionRow["status"]>("ALL");
   const [pending, startTransition] = useTransition();
   const [sendingIds, setSendingIds] = useState<Set<string>>(new Set());
+  const [rowPanel, setRowPanel] = useState<{ id: string; kind: "remove" | "reset" } | null>(null);
 
   const exam = published.find((e) => e.id === selected) ?? published[0];
   const examId = exam?.id ?? "";
@@ -149,6 +150,23 @@ export default function SessionGenerator({ exams, emailEnabled }: { exams: ExamO
       setTray([]);
       await mutate();
     });
+  };
+
+  const rowAction = (fn: () => Promise<{ ok: boolean; error?: string }>, okText: string) => {
+    setNotice(null);
+    startTransition(async () => {
+      const res = await fn();
+      setRowPanel(null);
+      if (!res.ok) return setNotice({ ok: false, text: res.error ?? "No se pudo completar la acción." });
+      setNotice({ ok: true, text: okText });
+      await mutate();
+    });
+  };
+
+  const showInTable = (email: string) => {
+    setSearch(email);
+    setFilter("ALL");
+    document.getElementById("tabla-aspirantes")?.scrollIntoView({ behavior: "smooth", block: "start" });
   };
 
   const publish = (id: string) => {
@@ -315,7 +333,12 @@ export default function SessionGenerator({ exams, emailEnabled }: { exams: ExamO
                         className="min-w-0 flex-1 rounded-lg border border-transparent bg-transparent px-2 py-1 text-sm font-medium hover:border-slate-300 focus:border-asigbo-blue focus:bg-white focus:outline-none"
                       />
                       <span className="hidden min-w-0 shrink truncate text-xs text-slate-500 sm:block sm:max-w-56">{c.email}</span>
-                      {exists && <span className="shrink-0 rounded-full bg-slate-100 px-2 py-0.5 text-xs font-medium text-slate-600">Ya tiene acceso</span>}
+                      {exists && (
+                        <>
+                          <span className="shrink-0 rounded-full bg-slate-100 px-2 py-0.5 text-xs font-medium text-slate-600">Ya tiene acceso</span>
+                          <button type="button" onClick={() => showInTable(c.email)} className="shrink-0 cursor-pointer text-xs font-semibold text-asigbo-blue underline hover:no-underline">Ver en la tabla</button>
+                        </>
+                      )}
                       <button type="button" onClick={() => setTray((t) => t.filter((x) => x.email !== c.email))} aria-label={`Quitar a ${c.email}`} className="cursor-pointer rounded-lg p-1.5 text-slate-400 hover:bg-red-50 hover:text-red-600">
                         <X className="h-4 w-4" aria-hidden="true" />
                       </button>
@@ -336,7 +359,7 @@ export default function SessionGenerator({ exams, emailEnabled }: { exams: ExamO
       </section>
 
       {/* Paso 3 */}
-      <section className={card}>
+      <section id="tabla-aspirantes" className={`${card} scroll-mt-6`}>
         <div className="p-6 pb-4">
           <StepTitle n={3} title="Envía los enlaces" hint="Cada aspirante tiene un enlace personal e intransferible." />
           {!emailEnabled && (
@@ -380,7 +403,7 @@ export default function SessionGenerator({ exams, emailEnabled }: { exams: ExamO
                 <th className="px-6 py-3 font-semibold">Aspirante</th>
                 <th className="px-4 py-3 font-semibold">Estado</th>
                 <th className="px-4 py-3 font-semibold">Correo</th>
-                <th className="px-6 py-3 text-right font-semibold">Enviar enlace</th>
+                <th className="px-6 py-3 text-right font-semibold">Acciones</th>
               </tr>
             </thead>
             <tbody>
@@ -400,7 +423,8 @@ export default function SessionGenerator({ exams, emailEnabled }: { exams: ExamO
                 const mailto = `mailto:${r.email}?subject=${encodeURIComponent(`Tu acceso al examen: ${exam?.title ?? ""}`)}&body=${encodeURIComponent(message(r))}`;
                 const wa = `https://wa.me/?text=${encodeURIComponent(message(r))}`;
                 return (
-                  <tr key={r.sessionId} className="border-t border-slate-100 hover:bg-slate-50/60">
+                  <Fragment key={r.sessionId}>
+                  <tr className="border-t border-slate-100 hover:bg-slate-50/60">
                     <td className="px-6 py-3">
                       <p className="font-medium">{r.name}</p>
                       <p className="text-xs text-slate-500">{r.email}</p>
@@ -422,6 +446,11 @@ export default function SessionGenerator({ exams, emailEnabled }: { exams: ExamO
                           {copied === r.sessionId ? <Check className="h-3.5 w-3.5 text-emerald-600" aria-hidden="true" /> : <Copy className="h-3.5 w-3.5" aria-hidden="true" />}
                           {copied === r.sessionId ? "Copiado" : "Copiar"}
                         </button>
+                        {r.status === "NOT_STARTED" ? (
+                          <button type="button" onClick={() => setRowPanel({ id: r.sessionId, kind: "remove" })} title="Quitar de la lista" aria-label={`Quitar a ${r.name}`} className="cursor-pointer rounded-lg p-2 text-slate-400 transition-colors hover:bg-red-50 hover:text-red-600 focus-visible:outline-2 focus-visible:outline-red-600"><Trash2 className="h-4 w-4" aria-hidden="true" /></button>
+                        ) : (
+                          <button type="button" onClick={() => setRowPanel({ id: r.sessionId, kind: "reset" })} title="Reiniciar el intento para que pueda volver a presentar" className={`${btnGhost} !px-2.5 !py-1.5 text-xs`}><RotateCcw className="h-3.5 w-3.5" aria-hidden="true" /> Reiniciar intento</button>
+                        )}
                         {!done && (
                           <>
                             <a href={wa} target="_blank" rel="noopener noreferrer" title="Enviar por WhatsApp" aria-label={`WhatsApp a ${r.name}`} className={`${btnGhost} !px-2.5 !py-1.5 text-xs`}>
@@ -442,6 +471,26 @@ export default function SessionGenerator({ exams, emailEnabled }: { exams: ExamO
                       </div>
                     </td>
                   </tr>
+                    {rowPanel?.id === r.sessionId && (
+                      <tr className="bg-slate-50">
+                        <td colSpan={4} className="px-6 py-3">
+                          <div className="flex flex-wrap items-center justify-between gap-3 text-sm">
+                            <p className="max-w-2xl text-slate-800">
+                              {rowPanel.kind === "remove"
+                                ? `¿Quitar a ${r.name} de la lista? Su enlace dejará de funcionar. Podrás volver a habilitarla cuando quieras.`
+                                : `¿Reiniciar el intento de ${r.name}? Se descartan sus respuestas y puntaje actuales, vuelve a «Sin iniciar» y el mismo enlace sirve de nuevo. Queda registrado en su bitácora.`}
+                            </p>
+                            <div className="flex gap-2">
+                              <button type="button" onClick={() => setRowPanel(null)} className={`${btnGhost} !px-3 !py-1.5 text-xs`}>Cancelar</button>
+                              <button type="button" disabled={pending} onClick={() => rowAction(rowPanel.kind === "remove" ? () => removeSession(r.sessionId) : () => resetSession(r.sessionId), rowPanel.kind === "remove" ? `${r.name} fue quitado de la lista.` : `Intento de ${r.name} reiniciado. Ya puedes reenviarle el enlace.`)} className="inline-flex cursor-pointer items-center gap-1 rounded-lg bg-red-600 px-3 py-1.5 text-xs font-semibold text-white hover:bg-red-700 disabled:opacity-50">
+                                {pending && <Loader2 className="h-3 w-3 animate-spin" aria-hidden="true" />} {rowPanel.kind === "remove" ? "Quitar" : "Reiniciar intento"}
+                              </button>
+                            </div>
+                          </div>
+                        </td>
+                      </tr>
+                    )}
+                  </Fragment>
                 );
               })}
             </tbody>
