@@ -4,7 +4,7 @@ import { useState, useTransition } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { AlertCircle, CalendarClock, Copy, Loader2, Lock, Pencil, Plus, Shuffle, Trash2 } from "lucide-react";
-import { deleteExam, duplicateExam, setExamStatus, type ExamListRow } from "@/actions/exams-admin";
+import { deleteExam, deleteExamWithHistory, duplicateExam, setExamStatus, type ExamListRow } from "@/actions/exams-admin";
 import ConfirmDialog from "@/components/admin/ConfirmDialog";
 import { btnGhost, btnPrimary, card, inputCls } from "@/components/admin/ui";
 import { fmtDate, fmtDateTime } from "@/lib/format";
@@ -17,11 +17,12 @@ const STATUS = {
   CLOSED: { label: "Cerrado", cls: "bg-slate-200 text-slate-700" },
 } as const;
 
-export default function ExamsManager({ exams, convocatorias }: { exams: ExamListRow[]; convocatorias: Conv[] }) {
+export default function ExamsManager({ exams, convocatorias, canForceDelete }: { exams: ExamListRow[]; convocatorias: Conv[]; canForceDelete: boolean }) {
   const router = useRouter();
   const [pending, startTransition] = useTransition();
   const [error, setError] = useState<string | null>(null);
-  const [panel, setPanel] = useState<{ id: string; kind: "delete" | "duplicate" } | null>(null);
+  const [panel, setPanel] = useState<{ id: string; kind: "delete" | "duplicate" | "force" } | null>(null);
+  const [typed, setTyped] = useState("");
   const [target, setTarget] = useState("");
   const [ask, setAsk] = useState<{ exam: ExamListRow; to: "DRAFT" | "PUBLISHED" | "CLOSED" } | null>(null);
   const askText = (a: NonNullable<typeof ask>) => {
@@ -93,7 +94,7 @@ export default function ExamsManager({ exams, convocatorias }: { exams: ExamList
                         {e.status === "PUBLISHED" && <button type="button" disabled={pending} onClick={() => setAsk({ exam: e, to: "CLOSED" })} className={`${btnGhost} !px-3 !py-1.5 text-xs`}>Cerrar</button>}
                         {e.status === "CLOSED" && <button type="button" disabled={pending} onClick={() => setAsk({ exam: e, to: "PUBLISHED" })} className={`${btnGhost} !px-3 !py-1.5 text-xs`}>Reabrir</button>}
                         {e.status === "PUBLISHED" && !locked && <button type="button" disabled={pending} onClick={() => setAsk({ exam: e, to: "DRAFT" })} className={`${btnGhost} !px-3 !py-1.5 text-xs`}>A borrador</button>}
-                        <button type="button" onClick={() => setPanel({ id: e.id, kind: "delete" })} disabled={pending || locked} title={locked ? "Tiene candidatos que lo iniciaron: se conserva el histórico" : "Eliminar examen"} aria-label={`Eliminar ${e.title}`} className="cursor-pointer rounded-lg p-2 text-slate-500 transition-colors hover:bg-red-50 hover:text-red-600 disabled:cursor-not-allowed disabled:opacity-30">
+                        <button type="button" onClick={() => { setTyped(""); setPanel({ id: e.id, kind: locked ? "force" : "delete" }); }} disabled={pending || (locked && !canForceDelete)} title={locked ? (canForceDelete ? "Tiene candidatos que lo iniciaron: eliminar junto con su historial (superadmin)" : "Tiene candidatos que lo iniciaron: se conserva el histórico") : "Eliminar examen"} aria-label={`Eliminar ${e.title}`} className="cursor-pointer rounded-lg p-2 text-slate-500 transition-colors hover:bg-red-50 hover:text-red-600 disabled:cursor-not-allowed disabled:opacity-30">
                           <Trash2 className="h-4 w-4" aria-hidden="true" />
                         </button>
                       </div>
@@ -104,6 +105,20 @@ export default function ExamsManager({ exams, convocatorias }: { exams: ExamList
                             <button type="button" onClick={() => setPanel(null)} className={`${btnGhost} !px-3 !py-1.5 text-xs`}>Cancelar</button>
                             <button type="button" disabled={pending} onClick={() => run(() => deleteExam(e.id))} className="inline-flex cursor-pointer items-center gap-1 rounded-lg bg-red-600 px-3 py-1.5 text-xs font-semibold text-white hover:bg-red-700 disabled:opacity-50">
                               {pending && <Loader2 className="h-3 w-3 animate-spin" aria-hidden="true" />} Eliminar definitivamente
+                            </button>
+                          </div>
+                        </div>
+                      )}
+                      {open === "force" && (
+                        <div className="mt-3 rounded-xl border-2 border-red-300 bg-red-50 p-3 text-xs text-red-900">
+                          <p className="font-semibold">Eliminar con todo su historial</p>
+                          <p className="mt-1">Este examen ya fue iniciado por {e.started} aspirante(s). Se borrarán el examen, las {e.sessions} sesión(es), sus respuestas y eventos de seguridad. <strong>No se puede deshacer</strong>; úsalo solo para pruebas. Queda registrado en la bitácora.</p>
+                          <label htmlFor={`ft-${e.id}`} className="mt-2 block font-medium">Escribe el título exacto para confirmar: <span className="font-mono">{e.title}</span></label>
+                          <input id={`ft-${e.id}`} value={typed} onChange={(ev) => setTyped(ev.target.value)} autoComplete="off" className={`${inputCls} mt-1`} />
+                          <div className="mt-2 flex justify-end gap-2">
+                            <button type="button" onClick={() => setPanel(null)} className={`${btnGhost} !px-3 !py-1.5 text-xs`}>Cancelar</button>
+                            <button type="button" disabled={pending || typed.trim() !== e.title} onClick={() => run(() => deleteExamWithHistory(e.id, typed))} className="inline-flex cursor-pointer items-center gap-1 rounded-lg bg-red-600 px-3 py-1.5 text-xs font-semibold text-white hover:bg-red-700 disabled:opacity-50">
+                              {pending && <Loader2 className="h-3 w-3 animate-spin" aria-hidden="true" />} Eliminar todo definitivamente
                             </button>
                           </div>
                         </div>

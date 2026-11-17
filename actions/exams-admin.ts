@@ -233,3 +233,26 @@ export async function deleteExam(examId: string): Promise<Result> {
     return { ok: false, error: "No se pudo eliminar el examen." };
   }
 }
+
+/**
+ * Elimina un examen CON todo su historial (sesiones, respuestas y eventos). Solo superadmin y solo
+ * escribiendo el título exacto: pensado para exámenes de prueba. Es irreversible.
+ */
+export async function deleteExamWithHistory(examId: string, confirmTitle: string): Promise<Result> {
+  if (!(await hasPermission("users:manage"))) return { ok: false, error: "Solo un superadmin puede eliminar un examen con su historial." };
+  try {
+    const exam = await prisma.exam.findUnique({ where: { id: examId }, select: { title: true, _count: { select: { sessions: true } } } });
+    if (!exam) return { ok: false, error: "El examen no existe." };
+    if (confirmTitle.trim() !== exam.title) return { ok: false, error: "El título escrito no coincide." };
+    await prisma.$transaction([
+      prisma.candidateSession.deleteMany({ where: { examId } }), // respuestas y eventos se eliminan en cascada
+      prisma.exam.delete({ where: { id: examId } }),
+    ]);
+    await logAction({ action: "exam.delete_with_history", entityType: "exam", entityId: examId, summary: `Eliminó el examen «${exam.title}» junto con ${exam._count.sessions} sesión(es) y todo su historial` });
+    refresh();
+    return { ok: true };
+  } catch (e) {
+    console.error(e);
+    return { ok: false, error: "No se pudo eliminar el examen." };
+  }
+}

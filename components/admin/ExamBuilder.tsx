@@ -17,6 +17,7 @@ import {
   AlertCircle,
 } from "lucide-react";
 import { setExamStatus, updateExam, type ExamForEdit } from "@/actions/exams-admin";
+import { canonicalHeader } from "@/lib/csv-exam";
 import { localToIso } from "@/lib/exam-window";
 import {
   createExamManual,
@@ -132,7 +133,7 @@ export default function ExamBuilder({ convocatorias, initial }: { convocatorias:
     Papa.parse<CsvRow>(file, {
       header: true,
       skipEmptyLines: true,
-      transformHeader: (h) => h.trim(),
+      transformHeader: (h) => canonicalHeader(h),
       complete: (res) => {
         setCsvRows(res.data);
         if (res.errors.length)
@@ -476,8 +477,9 @@ export default function ExamBuilder({ convocatorias, initial }: { convocatorias:
           </h2>
           <p className="mb-4 text-sm text-slate-500">
             Columnas requeridas:{" "}
-            <code className="rounded bg-slate-100 px-1">Pregunta, Tipo, OpcionA, OpcionB, Correcta</code>. Opcionales:{" "}
-            <code className="rounded bg-slate-100 px-1">OpcionC, OpcionD, Puntos, ImagenUrl</code>. «Correcta» = A, B, C o D.
+            <code className="rounded bg-slate-100 px-1">Pregunta, Opcion 1…4, Respuesta Correcta</code> (también sirven{" "}
+            <code className="rounded bg-slate-100 px-1">OpcionA…D</code> y <code className="rounded bg-slate-100 px-1">Correcta</code>). «Respuesta Correcta» puede ser A–D, 1–4 o el texto exacto de la opción. Opcionales:{" "}
+            <code className="rounded bg-slate-100 px-1">Tipo</code> (por defecto opción múltiple), <code className="rounded bg-slate-100 px-1">Puntos</code>, <code className="rounded bg-slate-100 px-1">ImagenUrl</code>.
           </p>
 
           <label className="flex cursor-pointer flex-col items-center justify-center rounded-xl border-2 border-dashed border-slate-300 p-8 text-center transition-colors hover:border-blue-400 hover:bg-blue-50/40">
@@ -499,7 +501,7 @@ export default function ExamBuilder({ convocatorias, initial }: { convocatorias:
                 <table className="w-full text-left text-xs">
                   <thead className="bg-slate-50 text-slate-600">
                     <tr>
-                      {["Pregunta", "Tipo", "OpcionA", "OpcionB", "Correcta"].map((h) => (
+                      {["Pregunta", "OpcionA", "OpcionB", "Correcta"].map((h) => (
                         <th key={h} className="px-3 py-2 font-semibold">
                           {h}
                         </th>
@@ -510,7 +512,6 @@ export default function ExamBuilder({ convocatorias, initial }: { convocatorias:
                     {csvRows.slice(0, 5).map((r, i) => (
                       <tr key={i} className="border-t border-slate-100">
                         <td className="max-w-xs truncate px-3 py-2">{r.Pregunta}</td>
-                        <td className="px-3 py-2">{r.Tipo}</td>
                         <td className="max-w-[10rem] truncate px-3 py-2">{r.OpcionA}</td>
                         <td className="max-w-[10rem] truncate px-3 py-2">{r.OpcionB}</td>
                         <td className="px-3 py-2">{r.Correcta}</td>

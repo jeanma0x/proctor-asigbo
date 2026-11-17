@@ -5,16 +5,18 @@ import ExamsManager from "@/components/admin/ExamsManager";
 import Gate from "@/components/admin/Gate";
 import { PageContainer, PageHeader } from "@/components/admin/ui";
 import { listExams } from "@/actions/exams-admin";
+import { getAdmin } from "@/lib/require-admin";
 import { prisma } from "@/lib/prisma";
 
 export const metadata: Metadata = { title: "Exámenes · ASIGBO Proctoring" };
 
 async function Content() {
-  const [exams, convocatorias] = await Promise.all([
+  const [exams, convocatorias, admin] = await Promise.all([
     listExams(),
     prisma.convocatoria.findMany({ where: { status: "ACTIVE" }, orderBy: [{ year: "desc" }], select: { id: true, name: true, year: true } }),
+    getAdmin(),
   ]);
-  return <ExamsManager exams={exams} convocatorias={convocatorias} />;
+  return <ExamsManager exams={exams} convocatorias={convocatorias} canForceDelete={admin?.role === "SUPERADMIN"} />;
 }
 
 export default function ExamsPage() {

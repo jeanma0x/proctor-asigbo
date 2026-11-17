@@ -1,5 +1,6 @@
 "use server";
 
+import { canonicalHeader, correctIndex } from "@/lib/csv-exam";
 import { randomUUID } from "crypto";
 import { revalidatePath } from "next/cache";
 import { prisma } from "@/lib/prisma";
@@ -179,12 +180,13 @@ export async function importExamFromCsv(
     const questions: PreparedQuestion[] = [];
     const options: PreparedOption[] = [];
 
-    for (const [i, row] of rows.entries()) {
+    for (const [i, raw] of rows.entries()) {
       const line = i + 2; // +1 encabezado, +1 base-1
+      const row: CsvRow = Object.fromEntries(Object.entries(raw).map(([k, v]) => [canonicalHeader(k), v]));
       const text = row.Pregunta?.trim();
       if (!text) return { ok: false, error: `Fila ${line}: falta la columna Pregunta.` };
 
-      const rawType = (row.Tipo ?? "").trim().toUpperCase().replace(/\s+/g, "_");
+      const rawType = (row.Tipo?.trim() ? row.Tipo : "MULTIPLE_CHOICE").trim().toUpperCase().replace(/\s+/g, "_");
       const type: QuestionTypeInput | null =
         rawType === "TEXT" || rawType === "TEXTO"
           ? "TEXT"
@@ -205,10 +207,9 @@ export async function importExamFromCsv(
 
       if (type === "MULTIPLE_CHOICE") {
         const texts = OPTION_COLUMNS.map((c) => row[c]?.trim() ?? "");
-        const correct = (row.Correcta ?? "").trim().toUpperCase();
-        const correctIdx = "ABCD".indexOf(correct);
-        if (correct.length !== 1 || correctIdx < 0 || !texts[correctIdx])
-          return { ok: false, error: `Fila ${line}: "Correcta" debe ser A, B, C o D y apuntar a una opción con texto.` };
+        const correctIdx = correctIndex(row.Correcta ?? "", texts);
+        if (correctIdx < 0)
+          return { ok: false, error: `Fila ${line}: la respuesta correcta debe ser A–D, 1–4 o coincidir exactamente con una sola de las opciones.` };
         if (texts.filter(Boolean).length < 2)
           return { ok: false, error: `Fila ${line}: se requieren al menos 2 opciones.` };
 
