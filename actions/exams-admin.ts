@@ -65,7 +65,7 @@ export type ExamForEdit = {
   status: "DRAFT" | "PUBLISHED" | "CLOSED";
   /** true si ya hay candidatos que iniciaron: las preguntas no se pueden tocar sin falsear el histórico. */
   locked: boolean;
-  questions: { text: string; type: "MULTIPLE_CHOICE" | "TEXT"; points: number; imageUrl: string; options: { text: string; isCorrect: boolean }[] }[];
+  questions: { text: string; type: "MULTIPLE_CHOICE" | "TEXT"; points: number; imageUrl: string; section: string; sectionNote: string; passage: string; options: { text: string; isCorrect: boolean }[] }[];
 };
 
 export async function getExamForEdit(examId: string): Promise<ExamForEdit | null> {
@@ -84,7 +84,7 @@ export async function getExamForEdit(examId: string): Promise<ExamForEdit | null
     opensAtLocal: isoToLocal(e.opensAt), closesAtLocal: isoToLocal(e.closesAt),
     status: e.status, locked: e._count.sessions > 0,
     questions: e.questions.map((q) => ({
-      text: q.text, type: q.type, points: q.points, imageUrl: q.imageUrl ?? "",
+      text: q.text, type: q.type, points: q.points, imageUrl: q.imageUrl ?? "", section: q.section ?? "", sectionNote: q.sectionNote ?? "", passage: q.passage ?? "",
       options: q.options.map((o) => ({ text: o.text, isCorrect: o.isCorrect })),
     })),
   };
@@ -178,7 +178,7 @@ export async function duplicateExam(examId: string, convocatoriaId?: string): Pr
         convocatoriaId: target, shuffleQuestions: src.shuffleQuestions, shuffleOptions: src.shuffleOptions,
         questions: {
           create: src.questions.map((q) => ({
-            text: q.text, type: q.type, imageUrl: q.imageUrl, position: q.position, points: q.points,
+            text: q.text, type: q.type, imageUrl: q.imageUrl, position: q.position, points: q.points, section: q.section, sectionNote: q.sectionNote, passage: q.passage,
             options: { create: q.options.map((o) => ({ text: o.text, imageUrl: o.imageUrl, isCorrect: o.isCorrect, position: o.position })) },
           })),
         },

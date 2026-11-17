@@ -146,6 +146,10 @@ model Question {
   /// Orden de aparición en el examen
   position Int          @default(0)
   points   Int          @default(1)
+  /// Sección del examen (título), nota de instrucciones y texto de lectura compartido por las preguntas de la sección.
+  section     String?
+  sectionNote String?
+  passage     String?
 
   exam    Exam     @relation(fields: [examId], references: [id], onDelete: Cascade)
   options Option[]

@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState } from "react";
+import { Fragment, useCallback, useEffect, useRef, useState } from "react";
 import Image from "next/image";
 import { Check, CheckCircle2, Clock, TriangleAlert } from "lucide-react";
 import { saveProgress, submitExam, type AnswerInput } from "@/actions/proctor";
@@ -12,6 +12,9 @@ export type ExamQuestion = {
   type: "MULTIPLE_CHOICE" | "TEXT";
   imageUrl: string | null;
   points: number;
+  section: string | null;
+  sectionNote: string | null;
+  passage: string | null;
   options: { id: string; text: string }[];
 };
 
@@ -251,7 +254,15 @@ export default function ExamForm({
           <div className="rounded-2xl border border-slate-200 bg-white p-4 lg:hidden">{Navigator}</div>
 
           {questions.map((q, i) => (
-            <section key={q.id} id={`q-${q.id}`} tabIndex={-1} aria-labelledby={`qt-${q.id}`} className="scroll-mt-32 rounded-2xl border border-slate-200 bg-white p-6 outline-none focus-visible:ring-2 focus-visible:ring-asigbo-blue sm:p-8">
+            <Fragment key={q.id}>
+            {(q.section || q.passage || q.sectionNote) && (i === 0 || (questions[i - 1].section ?? "") !== (q.section ?? "")) && (
+              <section aria-label={q.section ?? "Texto de lectura"} className="mt-4 rounded-2xl border border-asigbo-blue/20 bg-white p-6 sm:p-8">
+                {q.section && <h2 className="font-serif text-2xl font-semibold text-asigbo-blue">{q.section}</h2>}
+                {q.sectionNote && <p className="mt-2 whitespace-pre-wrap text-base leading-relaxed text-slate-700">{q.sectionNote}</p>}
+                {q.passage && <div className="mt-4 whitespace-pre-wrap rounded-xl bg-paper p-5 font-serif text-lg leading-loose text-slate-900">{q.passage}</div>}
+              </section>
+            )}
+            <section id={`q-${q.id}`} tabIndex={-1} aria-labelledby={`qt-${q.id}`} className="scroll-mt-32 rounded-2xl border border-slate-200 bg-white p-6 outline-none focus-visible:ring-2 focus-visible:ring-asigbo-blue sm:p-8">
               <div className="flex items-start gap-4">
                 <span className="font-serif text-4xl font-semibold leading-none text-asigbo-blue" aria-hidden="true">{i + 1}</span>
                 <div className="min-w-0 flex-1">
@@ -291,6 +302,7 @@ export default function ExamForm({
                 </div>
               )}
             </section>
+            </Fragment>
           ))}
 
           {error && <p role="alert" className="rounded-xl border border-red-300 bg-red-50 p-4 text-base text-red-900">{error}</p>}

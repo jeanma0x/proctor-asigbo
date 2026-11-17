@@ -34,6 +34,9 @@ type QuestionDraft = {
   type: QuestionTypeInput;
   points: number;
   imageUrl: string;
+  section?: string;
+  sectionNote?: string;
+  passage?: string;
   options: OptionDraft[];
 };
 
@@ -87,6 +90,9 @@ export default function ExamBuilder({ convocatorias, initial }: { convocatorias:
           type: q.type,
           points: q.points,
           imageUrl: q.imageUrl,
+          section: q.section,
+          sectionNote: q.sectionNote,
+          passage: q.passage,
           options: q.options.map((o, j) => ({ id: `o-edit-${i}-${j}`, text: o.text, isCorrect: o.isCorrect })),
         }))
       : [initialQuestion()],
@@ -158,7 +164,7 @@ export default function ExamBuilder({ convocatorias, initial }: { convocatorias:
         closesAt: localToIso(closesLocal),
         questions: locked
           ? undefined
-          : questions.map((q) => ({ text: q.text, type: q.type, points: q.points, imageUrl: q.imageUrl, options: q.type === "MULTIPLE_CHOICE" ? q.options : [] })),
+          : questions.map((q) => ({ text: q.text, type: q.type, points: q.points, imageUrl: q.imageUrl, section: q.section, sectionNote: q.sectionNote, passage: q.passage, options: q.type === "MULTIPLE_CHOICE" ? q.options : [] })),
       });
       if (!res.ok) return setResult(res);
       router.push("/admin/exams");
@@ -202,6 +208,9 @@ export default function ExamBuilder({ convocatorias, initial }: { convocatorias:
           type: q.type,
           points: q.points,
           imageUrl: q.imageUrl,
+          section: q.section,
+          sectionNote: q.sectionNote,
+          passage: q.passage,
           options: q.type === "MULTIPLE_CHOICE" ? q.options : [],
         })),
       });

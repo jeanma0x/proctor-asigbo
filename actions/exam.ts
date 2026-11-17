@@ -1,6 +1,7 @@
 "use server";
 
 import { canonicalHeader, correctIndex } from "@/lib/csv-exam";
+import { sectionFields } from "@/lib/exam-prepare";
 import { randomUUID } from "crypto";
 import { revalidatePath } from "next/cache";
 import { prisma } from "@/lib/prisma";
@@ -15,6 +16,9 @@ export type ManualQuestionInput = {
   type: QuestionTypeInput;
   points: number;
   imageUrl?: string;
+  section?: string | null;
+  sectionNote?: string | null;
+  passage?: string | null;
   options: { text: string; isCorrect: boolean }[];
 };
 
@@ -44,6 +48,9 @@ type PreparedQuestion = {
   points: number;
   imageUrl: string | null;
   position: number;
+  section: string | null;
+  sectionNote: string | null;
+  passage: string | null;
 };
 type PreparedOption = {
   questionId: string;
@@ -103,6 +110,7 @@ function validMeta(title: string, durationMinutes: number): string | null {
 function cleanUrl(url?: string): string | null {
   const u = url?.trim();
   if (!u) return null;
+  if (u.startsWith("/") && !u.startsWith("//")) return u.slice(0, 300);
   try {
     const parsed = new URL(u);
     return parsed.protocol === "http:" || parsed.protocol === "https:" ? u : null;
@@ -137,6 +145,7 @@ export async function createExamManual(input: CreateExamInput): Promise<ActionRe
         points: Math.max(1, Math.floor(q.points) || 1),
         imageUrl: cleanUrl(q.imageUrl),
         position: i,
+        ...sectionFields(q),
       });
 
       if (q.type === "MULTIPLE_CHOICE") {
@@ -203,6 +212,7 @@ export async function importExamFromCsv(
         points: Math.max(1, parseInt(row.Puntos ?? "1", 10) || 1),
         imageUrl: cleanUrl(row.ImagenUrl),
         position: i,
+        ...sectionFields({ section: row.Seccion, sectionNote: row.Instrucciones, passage: row.Texto }),
       });
 
       if (type === "MULTIPLE_CHOICE") {

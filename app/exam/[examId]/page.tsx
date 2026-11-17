@@ -78,6 +78,9 @@ async function ExamContent({
               type: true,
               imageUrl: true,
               points: true,
+              section: true,
+              sectionNote: true,
+              passage: true,
               // Nunca se envía isCorrect al cliente.
               options: { orderBy: { position: "asc" }, select: { id: true, text: true } },
             },
@@ -118,7 +121,15 @@ async function ExamContent({
 
   // Orden aleatorio por candidato, estable al recargar (semilla = id de sesión).
   let questions = session.exam.questions;
-  if (session.exam.shuffleQuestions) questions = seededShuffle(questions, `${session.id}:q`);
+  if (session.exam.shuffleQuestions) {
+    // Se mezcla DENTRO de cada sección (las secciones conservan su orden y el texto de lectura queda junto a sus preguntas).
+    const groups: (typeof questions)[] = [];
+    for (const q of questions) {
+      const last = groups[groups.length - 1];
+      if (last && (last[0].section ?? "") === (q.section ?? "")) last.push(q); else groups.push([q]);
+    }
+    questions = groups.flatMap((g, gi) => seededShuffle(g, `${session.id}:q:${gi}`));
+  }
   if (session.exam.shuffleOptions)
     questions = questions.map((q) => (q.type === "MULTIPLE_CHOICE" ? { ...q, options: seededShuffle(q.options, `${session.id}:o:${q.id}`) } : q));
   const totalPoints = questions.reduce((n, q) => n + q.points, 0);

@@ -8,18 +8,27 @@ export type PreparedQuestion = {
   points: number;
   imageUrl: string | null;
   position: number;
+  section: string | null;
+  sectionNote: string | null;
+  passage: string | null;
 };
 export type PreparedOption = { questionId: string; text: string; isCorrect: boolean; position: number };
 
 export function cleanUrl(url?: string): string | null {
   const u = url?.trim();
   if (!u) return null;
+  if (u.startsWith("/") && !u.startsWith("//")) return u.slice(0, 300); // imagen del propio sitio (carpeta public)
   try {
     const parsed = new URL(u);
     return parsed.protocol === "http:" || parsed.protocol === "https:" ? u : null;
   } catch {
     return null;
   }
+}
+
+export function sectionFields(q: { section?: string | null; sectionNote?: string | null; passage?: string | null }) {
+  const c = (v?: string | null, n = 20000) => v?.trim().slice(0, n) || null;
+  return { section: c(q.section, 200), sectionNote: c(q.sectionNote, 2000), passage: c(q.passage) };
 }
 
 /** Valida y normaliza las preguntas del editor manual. Devuelve el mensaje de error o las filas listas para createMany. */
@@ -34,7 +43,7 @@ export function prepareQuestions(
     if (!q.text?.trim()) return { ok: false, error: `Pregunta ${n}: el enunciado está vacío.` };
     if (q.imageUrl?.trim() && !cleanUrl(q.imageUrl)) return { ok: false, error: `Pregunta ${n}: la URL de imagen no es válida (http/https).` };
     const id = randomUUID();
-    questions.push({ id, text: q.text.trim(), type: q.type, points: Math.max(1, Math.floor(q.points) || 1), imageUrl: cleanUrl(q.imageUrl), position: i });
+    questions.push({ id, text: q.text.trim(), type: q.type, points: Math.max(1, Math.floor(q.points) || 1), imageUrl: cleanUrl(q.imageUrl), position: i, ...sectionFields(q) });
     if (q.type === "MULTIPLE_CHOICE") {
       const opts = q.options.filter((o) => o.text.trim());
       if (opts.length < 2) return { ok: false, error: `Pregunta ${n}: se requieren al menos 2 opciones.` };

@@ -9,6 +9,8 @@ const ALIASES: Record<string, string> = {
   correcta: "Correcta", respuestacorrecta: "Correcta", respuesta: "Correcta",
   puntos: "Puntos", puntaje: "Puntos",
   imagenurl: "ImagenUrl", imagen: "ImagenUrl",
+  seccion: "Seccion", instrucciones: "Instrucciones", instruccion: "Instrucciones",
+  texto: "Texto", textodelectura: "Texto", pasaje: "Texto", lectura: "Texto",
 };
 
 export function canonicalHeader(h: string): string {
