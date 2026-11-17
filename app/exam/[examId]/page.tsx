@@ -4,7 +4,7 @@ import { ShieldAlert } from "lucide-react";
 import { prisma } from "@/lib/prisma";
 import ProctorWrapper from "@/components/proctor/ProctorWrapper";
 import ExamForm from "@/components/proctor/ExamForm";
-import { seededShuffle } from "@/lib/shuffle";
+import { orderQuestionsForSession, seededShuffle } from "@/lib/shuffle";
 import { fmtDateTime } from "@/lib/format";
 import { windowState } from "@/lib/exam-window";
 
@@ -120,16 +120,7 @@ async function ExamContent({
   }
 
   // Orden aleatorio por candidato, estable al recargar (semilla = id de sesión).
-  let questions = session.exam.questions;
-  if (session.exam.shuffleQuestions) {
-    // Se mezcla DENTRO de cada sección (las secciones conservan su orden y el texto de lectura queda junto a sus preguntas).
-    const groups: (typeof questions)[] = [];
-    for (const q of questions) {
-      const last = groups[groups.length - 1];
-      if (last && (last[0].section ?? "") === (q.section ?? "")) last.push(q); else groups.push([q]);
-    }
-    questions = groups.flatMap((g, gi) => seededShuffle(g, `${session.id}:q:${gi}`));
-  }
+  let questions = orderQuestionsForSession(session.exam.questions, session.id, session.exam.shuffleQuestions);
   if (session.exam.shuffleOptions)
     questions = questions.map((q) => (q.type === "MULTIPLE_CHOICE" ? { ...q, options: seededShuffle(q.options, `${session.id}:o:${q.id}`) } : q));
   const totalPoints = questions.reduce((n, q) => n + q.points, 0);

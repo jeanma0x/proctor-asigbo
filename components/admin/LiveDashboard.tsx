@@ -239,6 +239,24 @@ function DetailPanel({
             )}
           </section>
 
+          {data?.progress && data.progress.total > 0 && (
+            <section>
+              <div className="mb-2 flex items-center justify-between">
+                <h3 className="text-xs font-semibold uppercase tracking-wide text-slate-500">Avance del examen</h3>
+                <span className="text-xs font-semibold text-slate-700">{data.progress.answered}/{data.progress.total} respondidas</span>
+              </div>
+              <div className="mb-2 h-1.5 w-full overflow-hidden rounded-full bg-slate-200" role="progressbar" aria-label="Preguntas respondidas" aria-valuemin={0} aria-valuemax={data.progress.total} aria-valuenow={data.progress.answered}>
+                <div className="h-full rounded-full bg-emerald-500 transition-all" style={{ width: `${Math.round((data.progress.answered / data.progress.total) * 100)}%` }} />
+              </div>
+              <ol className="flex flex-wrap gap-1" aria-label="Preguntas en el orden que ve el candidato">
+                {data.progress.cells.map((done, i) => (
+                  <li key={i} title={`Pregunta ${i + 1}: ${done ? "respondida" : "sin responder"}`} className={`flex h-6 w-6 items-center justify-center rounded text-[10px] font-semibold ${done ? "bg-emerald-100 text-emerald-800" : "border border-slate-300 bg-white text-slate-500"}`}>{i + 1}</li>
+                ))}
+              </ol>
+              <p className="mt-1.5 text-xs text-slate-500">Se muestra solo si cada pregunta tiene respuesta, no cuál. Numeradas en el orden en que las ve el candidato.</p>
+            </section>
+          )}
+
           {data && (
             <section>
               <div className="mb-2 flex items-center justify-between">

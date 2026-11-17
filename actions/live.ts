@@ -1,5 +1,6 @@
 "use server";
 
+import { orderQuestionsForSession } from "@/lib/shuffle";
 import { prisma } from "@/lib/prisma";
 import { getAdmin, hasPermission, UNAUTHORIZED } from "@/lib/require-admin";
 import { MAX_STRIKES } from "@/lib/proctor-constants";
@@ -81,15 +82,24 @@ export async function terminateSession(sessionId: string): Promise<{ ok: true } 
 /** Detalle completo de una sesión para el panel de infracciones y el acta (eventos en orden cronológico). */
 export async function getSessionDetail(sessionId: string) {
   if (!(await hasPermission("live:view"))) throw new Error("No autorizado");
-  return prisma.candidateSession.findUnique({
+  const s = await prisma.candidateSession.findUnique({
     where: { id: sessionId },
     select: {
       status: true, flagCount: true, startedAt: true, submittedAt: true, graceUntil: true, helpRequestedAt: true, helpNote: true,
       candidate: { select: { fullName: true, email: true } },
-      exam: { select: { title: true, durationMinutes: true } },
+      exam: { select: { title: true, durationMinutes: true, shuffleQuestions: true, questions: { orderBy: { position: "asc" }, select: { id: true, section: true } } } },
+      answers: { select: { questionId: true } },
       auditLogs: { orderBy: { createdAt: "asc" }, take: 300, select: { id: true, type: true, severity: true, details: true, createdAt: true, voidedAt: true, voidedBy: true, voidReason: true } },
     },
   });
+  if (!s) return null;
+  // Avance: solo "respondida o no" (nunca la opción elegida), en el mismo orden que ve el candidato.
+  const answered = new Set(s.answers.map((a) => a.questionId));
+  const ordered = orderQuestionsForSession(s.exam.questions, sessionId, s.exam.shuffleQuestions);
+  const progress = { cells: ordered.map((q) => answered.has(q.id)), answered: ordered.filter((q) => answered.has(q.id)).length, total: ordered.length };
+  const { answers: _a, ...rest } = s;
+  void _a;
+  return { ...rest, exam: { title: s.exam.title, durationMinutes: s.exam.durationMinutes }, progress };
 }
 
 type Res = { ok: true } | { ok: false; error: string };

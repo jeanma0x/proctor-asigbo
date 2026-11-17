@@ -29,3 +29,21 @@ export function seededShuffle<T>(items: readonly T[], seed: string): T[] {
   }
   return a;
 }
+
+/**
+ * Orden de las preguntas tal como las ve un candidato: mezcla determinista por sesión DENTRO de cada sección
+ * (las secciones conservan su orden). Compartido por el examen y el monitoreo en vivo.
+ */
+export function orderQuestionsForSession<T extends { section?: string | null }>(
+  questions: readonly T[],
+  sessionId: string,
+  shuffle: boolean,
+): T[] {
+  if (!shuffle) return [...questions];
+  const groups: T[][] = [];
+  for (const q of questions) {
+    const last = groups[groups.length - 1];
+    if (last && (last[0].section ?? "") === (q.section ?? "")) last.push(q); else groups.push([q]);
+  }
+  return groups.flatMap((g, gi) => seededShuffle(g, `${sessionId}:q:${gi}`));
+}
