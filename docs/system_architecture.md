@@ -17,7 +17,7 @@ Nota Cache Components: todo lo que lee cookies/sesión/BD en tiempo de petición
 
 ## 2. Mapa de módulos
 **Panel de administración (`/admin/*`, protegido por `proxy.ts` + validación en servidor):**
-Dashboard · Exámenes (lista, editar, duplicar, publicar/cerrar, eliminar) · Constructor (nuevo examen manual o CSV) · Enlaces de acceso (bandeja de aspirantes, correo/WhatsApp, quitar/reiniciar) · Monitoreo en vivo · Convocatorias · Candidatos (directorio y perfil) · Resultados e informes (detalle, calificación manual, PDF/CSV individual y grupal) · Ranking y decisiones · Usuarios y roles · Bitácora · Mi cuenta.
+Dashboard · Exámenes (lista, editar, duplicar, publicar/cerrar, eliminar) · Constructor (nuevo examen manual o CSV) · Enlaces de acceso (bandeja de aspirantes, correo/WhatsApp, quitar/reiniciar) · Monitoreo en vivo · Convocatorias · Candidatos (directorio y perfil) · Resultados e informes (detalle, calificación manual, PDF/CSV individual y grupal) · **Evaluación de la Junta** (cola por examen, pantalla de evaluación por candidato; el ranking con preselección en bloque sigue en `/admin/ranking`) · Usuarios y roles · Bitácora · Mi cuenta.
 
 **Zona pública del candidato:** `/` (página informativa) y `/exam/[examId]?session=<id>` (enlace personal).
 
@@ -57,6 +57,12 @@ Dashboard · Exámenes (lista, editar, duplicar, publicar/cerrar, eliminar) · C
 - Puntaje = opción múltiple (auto) + notas manuales de abiertas.
 - `lib/ranking.ts`: métodos *bruto*, *ponderado por dificultad* y *ponderado + integridad* (−5 por infracción), desempates por infracciones, tiempo y hora de entrega. Una pregunta abierta entra al índice solo cuando todas las entregas están calificadas en ella.
 - Las decisiones (seleccionado / lista de espera / no seleccionado) se guardan por sesión con autor y fecha.
+
+### Evaluación de la Junta
+- `Evaluation`: un voto (`SELECTED/WAITLIST/NOT_SELECTED`) y un comentario **por miembro y candidato** (`@@unique([sessionId, adminId])`), con el nombre del evaluador conservado.
+- `/admin/evaluation`: cola por examen en orden de ranking (los cerrados por infracciones al final), con tu avance, el recuento de votos de la Junta y la decisión final.
+- `/admin/evaluation/[sessionId]`: resultado, respuestas (con filtros y calificación de abiertas), incidentes, **Tu evaluación**, **La Junta** (votos y comentarios de todos), **Decisión final** (admin/superadmin; puede aplicar la mayoría si hay ganador claro) y navegación Anterior/Siguiente/«Siguiente sin mi voto».
+- Permiso `evaluation:write` (voto y comentario): superadmin, administrador y revisor. La decisión final sigue siendo `ranking:decide`.
 
 ## 7. Monitoreo en vivo
 Polling con SWR cada 3 s (`actions/live.ts`); Vercel serverless no mantiene WebSockets. Alternativa futura: Pusher. Al detectar una infracción nueva el panel la muestra en el feed «Infracciones en vivo», con opción de sonido/notificación del navegador y contador en el título de la pestaña. Al llegar a 3 infracciones aparece un aviso para pedir al candidato que salga de Zoom. El panel «Detalle» da la línea de tiempo con segundos y un **acta** copiable que justifica el cierre (`getSessionDetail`).

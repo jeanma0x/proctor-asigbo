@@ -206,6 +206,7 @@ model CandidateSession {
   exam      Exam       @relation(fields: [examId], references: [id], onDelete: Restrict)
   answers   Answer[]
   auditLogs AuditLog[]
+  evaluations Evaluation[]
 
   @@unique([candidateId, examId])
   @@index([status])
@@ -294,4 +295,22 @@ model LoginAttempt {
 
   @@index([email, createdAt])
   @@index([ip, createdAt])
+}
+
+/// Evaluación individual de un miembro de la Junta sobre un candidato (un voto y un comentario por persona y examen)
+model Evaluation {
+  id         String             @id @default(cuid())
+  sessionId  String
+  adminId    String
+  /// Nombre visible del evaluador al momento de guardar (se conserva aunque cambie o se elimine su cuenta)
+  adminName  String
+  vote       SelectionDecision?
+  comment    String             @default("")
+  createdAt  DateTime           @default(now())
+  updatedAt  DateTime           @updatedAt
+
+  session CandidateSession @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+
+  @@unique([sessionId, adminId])
+  @@index([sessionId])
 }

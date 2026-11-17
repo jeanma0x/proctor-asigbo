@@ -3,7 +3,7 @@ import { Suspense } from "react";
 import Link from "next/link";
 import type { Metadata } from "next";
 import { notFound } from "next/navigation";
-import { ArrowLeft, Check, CircleHelp, FileText, X } from "lucide-react";
+import { ArrowLeft, FileText, Scale } from "lucide-react";
 import Gate from "@/components/admin/Gate";
 import { PageContainer } from "@/components/admin/ui";
 import { card } from "@/components/admin/ui";
@@ -11,7 +11,7 @@ import { getResultDetail } from "@/actions/results";
 import { getAdmin } from "@/lib/require-admin";
 import { can } from "@/lib/permissions";
 import { btnPrimary } from "@/components/admin/ui";
-import GradeControl from "@/components/admin/GradeControl";
+import AnswerReview from "@/components/admin/AnswerReview";
 import { fmtDateTime } from "@/lib/format";
 import { EVENT_LABEL, STATUS_LABEL } from "@/lib/labels";
 
@@ -42,6 +42,7 @@ async function Detail({ params }: { params: Promise<{ sessionId: string }> }) {
           </div>
           <div className="flex flex-col items-end gap-3">
             <span className={`rounded-full px-3 py-1 text-sm font-semibold ${st.cls}`}>{st.label}</span>
+            <Link href={`/admin/evaluation/${d.id}`} className={btnPrimary}><Scale className="h-4 w-4" aria-hidden="true" /> Evaluar</Link>
             {canExport && <PdfPreview href={`/admin/reports/candidate/${d.id}/pdf`} title={`Informe de ${d.candidate.fullName}`} className={btnPrimary}><FileText className="h-4 w-4" aria-hidden="true" /> Informe PDF</PdfPreview>}
           </div>
         </div>
@@ -65,49 +66,7 @@ async function Detail({ params }: { params: Promise<{ sessionId: string }> }) {
         )}
       </header>
 
-      <section aria-label="Respuestas" className="space-y-4">
-        {d.questions.map((q) => (
-          <article key={q.id} className={`${card} p-6`}>
-            <div className="flex items-start justify-between gap-3">
-              <div>
-                <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Pregunta {q.number} · {q.points} pt</p>
-                <h2 className="mt-1 font-semibold">{q.text}</h2>
-              </div>
-              {q.type === "MULTIPLE_CHOICE" ? (
-                <span className={`flex shrink-0 items-center gap-1 rounded-full px-2.5 py-1 text-xs font-semibold ${!q.answered ? "bg-slate-100 text-slate-700" : q.correct ? "bg-emerald-100 text-emerald-800" : "bg-red-100 text-red-800"}`}>
-                  {!q.answered ? <CircleHelp className="h-3.5 w-3.5" aria-hidden="true" /> : q.correct ? <Check className="h-3.5 w-3.5" aria-hidden="true" /> : <X className="h-3.5 w-3.5" aria-hidden="true" />}
-                  {!q.answered ? "Sin responder" : q.correct ? `Correcta +${q.earned}` : "Incorrecta"}
-                </span>
-              ) : (
-                <span className={`shrink-0 rounded-full px-2.5 py-1 text-xs font-semibold ${q.graded && q.answered ? "bg-emerald-100 text-emerald-800" : q.answered ? "bg-amber-100 text-amber-900" : "bg-slate-100 text-slate-700"}`}>
-                  {!q.answered ? "Sin responder" : q.graded ? `Calificada ${q.earned} / ${q.points}` : "Pendiente de calificar"}
-                  {q.answered && q.graded && q.gradedBy ? <span className="ml-1 font-normal opacity-80">· por {q.gradedBy.split("@")[0]}</span> : null}
-                </span>
-              )}
-            </div>
-            {q.type === "MULTIPLE_CHOICE" ? (
-              <ul className="mt-4 space-y-2">
-                {q.options.map((o) => (
-                  <li key={o.id} className={`flex items-center justify-between gap-3 rounded-xl border px-3.5 py-2.5 text-sm ${o.selected && o.isCorrect ? "border-emerald-300 bg-emerald-50" : o.selected ? "border-red-300 bg-red-50" : o.isCorrect ? "border-emerald-200 bg-white" : "border-slate-200"}`}>
-                    <span>{o.text}</span>
-                    <span className="flex shrink-0 gap-2 text-xs font-semibold">
-                      {o.selected && <span className="text-slate-700">Su respuesta</span>}
-                      {o.isCorrect && <span className="text-emerald-700">Correcta</span>}
-                    </span>
-                  </li>
-                ))}
-              </ul>
-            ) : (
-              <blockquote className="mt-4 whitespace-pre-wrap rounded-xl bg-slate-50 p-4 text-sm text-slate-800">
-                {q.textResponse?.trim() || <span className="text-slate-500">Sin responder</span>}
-              </blockquote>
-            )}
-            {q.type === "TEXT" && q.answered && canGrade && (
-              <GradeControl sessionId={d.id} questionId={q.id} points={q.points} current={q.manualScore} />
-            )}
-          </article>
-        ))}
-      </section>
+      <AnswerReview sessionId={d.id} questions={d.questions} canGrade={canGrade} />
 
       <section className={`${card} p-6`}>
         <h2 className="font-semibold">Bitácora de eventos</h2>

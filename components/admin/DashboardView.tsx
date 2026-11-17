@@ -67,7 +67,7 @@ export default function DashboardView({ data }: { data: Data }) {
         </select>
         {x.inProgress > 0 && <Link href="/admin/live" className="rounded-full bg-blue-100 px-3 py-1 text-xs font-semibold text-blue-800 hover:bg-blue-200">{x.inProgress} en examen ahora <ArrowRight className="ml-0.5 inline h-3 w-3" aria-hidden="true" /></Link>}
         {x.pendingGrade > 0 && <Link href="/admin/candidates" className="inline-flex items-center gap-1 rounded-full bg-amber-100 px-3 py-1 text-xs font-semibold text-amber-900 hover:bg-amber-200">{x.pendingGrade} respuesta(s) abierta(s) por calificar <ArrowRight className="h-3 w-3" aria-hidden="true" /></Link>}
-        {x.toReview > 0 && <Link href={`/admin/ranking${x.topExam ? `?e=${x.topExam.id}` : ""}`} className="inline-flex items-center gap-1 rounded-full bg-amber-100 px-3 py-1 text-xs font-semibold text-amber-900 hover:bg-amber-200"><Flag className="h-3 w-3" aria-hidden="true" /> {x.toReview} candidato(s) por revisar</Link>}
+        {x.toReview > 0 && <Link href={`/admin/evaluation${x.topExam ? `?e=${x.topExam.id}` : ""}`} className="inline-flex items-center gap-1 rounded-full bg-amber-100 px-3 py-1 text-xs font-semibold text-amber-900 hover:bg-amber-200"><Flag className="h-3 w-3" aria-hidden="true" /> {x.toReview} candidato(s) por revisar</Link>}
       </div>
 
       {/* Cifras principales */}
@@ -159,7 +159,7 @@ export default function DashboardView({ data }: { data: Data }) {
                   </li>
                 ))}
               </ol>
-              <Link href={`/admin/ranking${x.topExam ? `?e=${x.topExam.id}` : ""}`} className="mt-3 inline-flex items-center gap-1.5 text-sm font-semibold text-asigbo-blue hover:underline"><Trophy className="h-4 w-4" aria-hidden="true" /> Ver ranking completo</Link>
+              <Link href={`/admin/evaluation${x.topExam ? `?e=${x.topExam.id}` : ""}`} className="mt-3 inline-flex items-center gap-1.5 text-sm font-semibold text-asigbo-blue hover:underline"><Trophy className="h-4 w-4" aria-hidden="true" /> Evaluar candidatos y ver ranking</Link>
             </>
           )}
         </Panel>

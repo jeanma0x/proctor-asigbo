@@ -3,7 +3,7 @@
 import { useState, useTransition, type FormEvent } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { AlertCircle, FileText, Loader2, Pencil, Send, Trash2 } from "lucide-react";
+import { AlertCircle, FileText, Loader2, Pencil, Scale, Send, Trash2 } from "lucide-react";
 import { addNote, deleteCandidate, deleteNote, updateCandidate, type CandidateProfile } from "@/actions/candidates";
 import { setDecision } from "@/actions/ranking";
 import ConfirmDialog from "@/components/admin/ConfirmDialog";
@@ -115,6 +115,7 @@ export default function CandidateProfileView({ p, meId, isSuper, canDecide, canG
               {s.pendingGrade > 0 && <p className="mt-3 rounded-lg bg-amber-50 px-3 py-2 text-sm text-amber-900">{s.pendingGrade} respuesta(s) abierta(s) por calificar.</p>}
               <div className="mt-4 flex flex-wrap gap-2">
                 <Link href={`/admin/results/${s.id}`} className={btnGhost}>{canGrade && s.pendingGrade > 0 ? "Ver y calificar respuestas" : "Ver respuestas"}</Link>
+                {(s.status === "SUBMITTED" || s.status === "TERMINATED") && <Link href={`/admin/evaluation/${s.id}`} className={btnGhost}><Scale className="h-4 w-4" aria-hidden="true" /> Evaluar</Link>}
                 {canExport && <PdfPreview href={`/admin/reports/candidate/${s.id}/pdf`} title={`Informe de ${p.fullName}`} className={btnGhost}><FileText className="h-4 w-4" aria-hidden="true" /> Informe PDF</PdfPreview>}
               </div>
             </article>
