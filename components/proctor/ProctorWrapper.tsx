@@ -14,7 +14,7 @@ import {
   type ReactNode,
 } from "react";
 import { Ban, Clock, Expand, FileQuestion, MonitorX, TriangleAlert } from "lucide-react";
-import { logInfraction, startSession } from "@/actions/proctor";
+import { getHelpState, logInfraction, startSession } from "@/actions/proctor";
 import { MAX_STRIKES } from "@/lib/proctor-constants";
 
 type Phase = "welcome" | "active" | "finished" | "terminated";
@@ -26,6 +26,8 @@ type ProctorContextValue = {
   /** serverNow - clientNow; sumar a Date.now() para obtener la hora del servidor. */
   clockOffsetMs: number;
   strikes: number;
+  /** Llamar tras enviar una solicitud de ayuda: empieza a consultar si la Junta autoriza una salida. */
+  markHelpRequested: () => void;
   /** Llamar al entregar: detiene el monitoreo y sale de pantalla completa. */
   finish: () => void;
 };
@@ -96,6 +98,13 @@ export default function ProctorWrapper({
   const [acknowledged, setAcknowledged] = useState(false);
   const [timing, setTiming] = useState({ deadlineMs: 0, clockOffsetMs: 0 });
 
+  // Salida autorizada por la Junta (instante en hora del servidor) y consulta tras pedir ayuda.
+  const [graceUntilMs, setGraceUntilMs] = useState<number | null>(null);
+  const [helpWatch, setHelpWatch] = useState(false);
+  const [graceLeft, setGraceLeft] = useState(0);
+  const graceRef = useRef<number | null>(null);
+  const offsetRef = useRef(0);
+
   const phaseRef = useRef<Phase>("welcome");
   const strikesRef = useRef(initialFlagCount);
   const lastStrikeAt = useRef(0);
@@ -118,9 +127,11 @@ export default function ProctorWrapper({
       if (now - lastStrikeAt.current < STRIKE_DEBOUNCE_MS) return;
       lastStrikeAt.current = now;
 
-      setWarning({ type, strike: Math.min(strikesRef.current + 1, MAX_STRIKES) });
+      const excusedNow = graceRef.current !== null && Date.now() + offsetRef.current < graceRef.current;
+      if (!excusedNow) setWarning({ type, strike: Math.min(strikesRef.current + 1, MAX_STRIKES) });
       const res = await logInfraction(sessionId, type, details);
       if (!res.ok) return;
+      if (res.excused) { setWarning(null); return; }
       strikesRef.current = res.flagCount;
       setStrikes(res.flagCount);
       if (res.terminated) {
@@ -143,6 +154,38 @@ export default function ProctorWrapper({
     },
     [sessionId],
   );
+
+  const markHelpRequested = useCallback(() => setHelpWatch(true), []);
+
+  // Tras pedir ayuda se consulta cada 4 s si la Junta autorizó una salida; se detiene cuando ya no hay nada pendiente.
+  useEffect(() => {
+    if (phase !== "active" || !helpWatch) return;
+    let alive = true;
+    const poll = async () => {
+      const r = await getHelpState(sessionId);
+      if (!alive || !r.ok) return;
+      offsetRef.current = new Date(r.serverNow).getTime() - Date.now();
+      const g = r.graceUntil ? new Date(r.graceUntil).getTime() : null;
+      graceRef.current = g;
+      setGraceUntilMs(g);
+      if (!r.pending && !g) setHelpWatch(false);
+    };
+    void poll();
+    const t = setInterval(poll, 4000);
+    return () => { alive = false; clearInterval(t); };
+  }, [phase, helpWatch, sessionId]);
+
+  // Cuenta regresiva visible de la salida autorizada.
+  useEffect(() => {
+    if (graceUntilMs === null) return;
+    const update = () => {
+      const left = Math.ceil((graceUntilMs - (Date.now() + offsetRef.current)) / 1000);
+      if (left <= 0) { graceRef.current = null; setGraceUntilMs(null); setGraceLeft(0); } else setGraceLeft(left);
+    };
+    update();
+    const t = setInterval(update, 1000);
+    return () => clearInterval(t);
+  }, [graceUntilMs]);
 
   const enterFullscreen = useCallback(async () => {
     try {
@@ -252,8 +295,8 @@ export default function ProctorWrapper({
     };
 
   const ctx = useMemo<ProctorContextValue>(
-    () => ({ ...timing, strikes, finish }),
-    [timing, strikes, finish],
+    () => ({ ...timing, strikes, finish, markHelpRequested }),
+    [timing, strikes, finish, markHelpRequested],
   );
 
   // ───────────── Pantallas ─────────────
@@ -357,6 +400,12 @@ export default function ProctorWrapper({
       >
         {children}
       </div>
+
+      {phase === "active" && graceUntilMs !== null && graceLeft > 0 && (
+        <div role="status" className="fixed inset-x-0 top-0 z-[60] bg-emerald-700 px-4 py-2 text-center text-sm font-semibold text-white shadow">
+          La Junta autorizó tu salida: puedes revisar Zoom. Te quedan {Math.floor(graceLeft / 60)}:{String(graceLeft % 60).padStart(2, "0")}. El tiempo del examen sigue corriendo.
+        </div>
+      )}
 
       {showFullscreenLock && (
         <div role="alertdialog" aria-modal="true" aria-labelledby="fs-title" className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/70 p-6">

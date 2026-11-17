@@ -2,8 +2,8 @@
 
 import { Fragment, useCallback, useEffect, useRef, useState } from "react";
 import Image from "next/image";
-import { Check, CheckCircle2, Clock, TriangleAlert } from "lucide-react";
-import { saveProgress, submitExam, type AnswerInput } from "@/actions/proctor";
+import { Check, CheckCircle2, Clock, HelpCircle, Loader2, TriangleAlert, X } from "lucide-react";
+import { requestHelp, saveProgress, submitExam, type AnswerInput } from "@/actions/proctor";
 import { useProctor } from "@/components/proctor/ProctorWrapper";
 
 export type ExamQuestion = {
@@ -40,7 +40,22 @@ export default function ExamForm({
   initialChoices: Record<string, string>;
   initialTexts: Record<string, string>;
 }) {
-  const { deadlineMs, clockOffsetMs, strikes, finish } = useProctor();
+  const { deadlineMs, clockOffsetMs, strikes, finish, markHelpRequested } = useProctor();
+  const [helpOpen, setHelpOpen] = useState(false);
+  const [helpReason, setHelpReason] = useState("");
+  const [helpNote, setHelpNote] = useState("");
+  const [helpSending, setHelpSending] = useState(false);
+  const [helpMsg, setHelpMsg] = useState<{ ok: boolean; text: string } | null>(null);
+  const sendHelp = async () => {
+    if (!helpReason) return setHelpMsg({ ok: false, text: "Elige un motivo." });
+    setHelpSending(true); setHelpMsg(null);
+    const r = await requestHelp(sessionId, helpReason, helpNote);
+    setHelpSending(false);
+    if (!r.ok) return setHelpMsg({ ok: false, text: r.error });
+    markHelpRequested();
+    setHelpMsg({ ok: true, text: "La Junta recibió tu solicitud. Si es urgente, también puedes hablar por el micrófono. Cierra esta ventana y sigue con tu examen." });
+    setHelpNote("");
+  };
   const [choices, setChoices] = useState<Record<string, string>>(initialChoices);
   const [texts, setTexts] = useState<Record<string, string>>(initialTexts);
   const [remaining, setRemaining] = useState(() => deadlineMs - (Date.now() + clockOffsetMs));
@@ -229,6 +244,9 @@ export default function ExamForm({
               </p>
             </div>
           </div>
+          <button type="button" onClick={() => { setHelpMsg(null); setHelpOpen(true); }} className="flex shrink-0 cursor-pointer items-center gap-1.5 rounded-xl border border-slate-300 bg-white px-3 py-2 text-sm font-semibold text-slate-800 transition-colors hover:border-asigbo-blue hover:text-asigbo-blue focus-visible:outline-3 focus-visible:outline-offset-2 focus-visible:outline-asigbo-blue">
+            <HelpCircle className="h-5 w-5" aria-hidden="true" /> <span className="hidden sm:inline">Pedir ayuda</span>
+          </button>
           <div
             role="timer"
             aria-label={`Tiempo restante ${fmt(remaining)}`}
@@ -248,6 +266,37 @@ export default function ExamForm({
           </p>
         )}
       </header>
+
+      {helpOpen && (
+        <div role="dialog" aria-modal="true" aria-labelledby="help-title" className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/60 p-4">
+          <div className="w-full max-w-md rounded-2xl bg-white p-6 shadow-xl">
+            <div className="flex items-start justify-between gap-3">
+              <h2 id="help-title" className="font-serif text-2xl font-semibold text-slate-900">Pedir ayuda a la Junta</h2>
+              <button type="button" onClick={() => setHelpOpen(false)} aria-label="Cerrar" className="cursor-pointer rounded-lg p-1.5 text-slate-500 hover:bg-slate-100"><X className="h-5 w-5" aria-hidden="true" /></button>
+            </div>
+            <p className="mt-1 text-sm text-slate-600">Tu examen sigue corriendo y no sales de la pantalla. La Junta verá tu solicitud al instante.</p>
+            <fieldset className="mt-4 space-y-2">
+              <legend className="sr-only">Motivo</legend>
+              {[["TECH", "Tengo un problema técnico"], ["QUESTION", "Tengo una duda sobre una pregunta"], ["ZOOM", "Necesito revisar Zoom o el chat"], ["OTHER", "Otro motivo"]].map(([v, l]) => (
+                <label key={v} className={`flex min-h-11 cursor-pointer items-center gap-3 rounded-xl border-2 px-3 py-2 text-base ${helpReason === v ? "border-asigbo-blue bg-asigbo-blue/5" : "border-slate-200 hover:border-slate-400"}`}>
+                  <input type="radio" name="help-reason" value={v} checked={helpReason === v} onChange={() => setHelpReason(v)} className="h-4 w-4 accent-asigbo-blue" /> {l}
+                </label>
+              ))}
+            </fieldset>
+            <label htmlFor="help-note" className="mt-4 block text-sm font-medium text-slate-700">Cuéntanos más (opcional)</label>
+            <textarea id="help-note" value={helpNote} onChange={(e) => setHelpNote(e.target.value.slice(0, 200))} rows={2} className="mt-1 w-full select-text rounded-xl border-2 border-slate-300 p-3 text-base outline-none focus:border-asigbo-blue" />
+            {helpMsg && <p role="status" className={`mt-3 rounded-lg p-3 text-sm ${helpMsg.ok ? "bg-emerald-50 text-emerald-900" : "bg-red-50 text-red-900"}`}>{helpMsg.text}</p>}
+            <div className="mt-5 flex justify-end gap-2">
+              <button type="button" onClick={() => setHelpOpen(false)} className="min-h-11 cursor-pointer rounded-xl border border-slate-300 px-4 text-base font-medium text-slate-700 hover:bg-slate-50">{helpMsg?.ok ? "Cerrar" : "Cancelar"}</button>
+              {!helpMsg?.ok && (
+                <button type="button" onClick={sendHelp} disabled={helpSending} className="inline-flex min-h-11 cursor-pointer items-center gap-2 rounded-xl bg-asigbo-blue px-5 text-base font-semibold text-white hover:bg-asigbo-blue-dark disabled:opacity-60">
+                  {helpSending && <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" />} Enviar solicitud
+                </button>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
 
       <div className="mx-auto grid max-w-6xl gap-8 px-4 py-8 sm:px-6 lg:grid-cols-[1fr_16rem]">
         <main className="min-w-0 space-y-5">

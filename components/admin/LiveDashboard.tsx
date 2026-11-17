@@ -3,9 +3,9 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import useSWR from "swr";
 import {
-  AlertTriangle, Bell, BellOff, CheckCircle2, ClipboardCopy, Eye, Loader2, MonitorPlay, Search, ShieldAlert, Square, Users, Video, WifiOff, X,
+  AlertTriangle, Bell, BellOff, CheckCircle2, ClipboardCopy, Eye, HandHelping, Undo2, Loader2, MonitorPlay, Search, ShieldAlert, Square, Users, Video, WifiOff, X,
 } from "lucide-react";
-import { getLiveOverview, getSessionDetail, terminateSession, type LiveSession } from "@/actions/live";
+import { attendHelp, getLiveOverview, getSessionDetail, grantLeave, terminateSession, voidInfraction, type LiveSession } from "@/actions/live";
 import { card, inputCls } from "@/components/admin/ui";
 import { fmtDateTime, fmtDateTimeSec } from "@/lib/format";
 import { EVENT_LABEL } from "@/lib/labels";
@@ -21,7 +21,7 @@ const SOFT_TYPES = new Set(["PASTE_ATTEMPT", "COPY_ATTEMPT", "CUT_ATTEMPT", "CON
 
 type Alert = {
   id: string; sessionId: string; name: string; exam: string; label: string; detail: string | null;
-  kind: "strike" | "soft"; strikeNo: number | null; at: number; read: boolean;
+  kind: "strike" | "soft" | "help"; strikeNo: number | null; at: number; read: boolean;
 };
 
 const pad = (n: number) => String(n).padStart(2, "0");
@@ -49,7 +49,9 @@ function Strikes({ count }: { count: number }) {
 
 /** Acta lista para pegar en el chat de Zoom o en un correo: justifica el cierre con hora exacta por evento. */
 function buildActa(d: Detail): string {
-  const strikes = d.auditLogs.filter((l) => STRIKE_TYPES.has(l.type));
+  const strikes = d.auditLogs.filter((l) => STRIKE_TYPES.has(l.type) && l.severity !== "INFO" && !l.voidedAt);
+  const voided = d.auditLogs.filter((l) => STRIKE_TYPES.has(l.type) && l.severity !== "INFO" && l.voidedAt);
+  const excused = d.auditLogs.filter((l) => STRIKE_TYPES.has(l.type) && l.severity === "INFO");
   const soft = d.auditLogs.filter((l) => SOFT_TYPES.has(l.type));
   const lines = [
     `ACTA DE INFRACCIONES · ${d.exam.title}`,
@@ -59,6 +61,14 @@ function buildActa(d: Detail): string {
     `Infracciones registradas: ${strikes.length} de ${MAX_STRIKES}`,
     ...strikes.map((l, i) => `${i + 1}. ${fmtDateTimeSec(l.createdAt)} — ${EVENT_LABEL[l.type] ?? l.type}${l.details ? ` (${l.details})` : ""}`),
   ];
+  if (voided.length) {
+    lines.push("", `Infracciones anuladas por la Junta: ${voided.length}`);
+    lines.push(...voided.map((l) => `· ${fmtDateTimeSec(l.createdAt)} — ${EVENT_LABEL[l.type] ?? l.type} (anulada por ${l.voidedBy ?? "la Junta"}: ${l.voidReason ?? "sin motivo"})`));
+  }
+  if (excused.length) {
+    lines.push("", `Salidas autorizadas por la Junta: ${excused.length}`);
+    lines.push(...excused.map((l) => `· ${fmtDateTimeSec(l.createdAt)} — ${EVENT_LABEL[l.type] ?? l.type}`));
+  }
   if (soft.length) {
     lines.push("", `Intentos no penalizados: ${soft.length}`);
     lines.push(...soft.map((l) => `· ${fmtDateTimeSec(l.createdAt)} — ${EVENT_LABEL[l.type] ?? l.type}`));
@@ -90,11 +100,14 @@ function beep() {
 function DetailPanel({
   session, canTerminate, now, onClose, onTerminated,
 }: { session: LiveSession; canTerminate: boolean; now: number; onClose: () => void; onTerminated: () => void }) {
-  const { data, isLoading } = useSWR(["session-detail", session.id], () => getSessionDetail(session.id), { refreshInterval: 3000, keepPreviousData: true });
+  const { data, isLoading, mutate: reloadDetail } = useSWR(["session-detail", session.id], () => getSessionDetail(session.id), { refreshInterval: 3000, keepPreviousData: true });
   const [copied, setCopied] = useState(false);
   const [confirm, setConfirm] = useState(false);
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState<string | null>(null);
+  const [voidFor, setVoidFor] = useState<string | null>(null);
+  const [voidReason, setVoidReason] = useState("");
+  const [note, setNote] = useState<string | null>(null);
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => { if (e.key === "Escape") onClose(); };
@@ -110,6 +123,17 @@ function DetailPanel({
   const copy = async () => {
     try { await navigator.clipboard.writeText(acta); setCopied(true); setTimeout(() => setCopied(false), 2000); } catch { setErr("No se pudo copiar. Selecciona el texto manualmente."); }
   };
+  const run = async (fn: () => Promise<{ ok: boolean; error?: string }>, okText: string) => {
+    setBusy(true); setErr(null); setNote(null);
+    const res = await fn();
+    setBusy(false);
+    if (!res.ok) return setErr(res.error ?? "No se pudo completar la acción.");
+    setNote(okText); onTerminated(); await reloadDetail();
+  };
+  const pendingHelp = data?.helpRequestedAt ?? session.helpRequestedAt;
+  const helpText = data?.helpNote ?? session.helpNote;
+  const graceUntil = data?.graceUntil ?? session.graceUntil;
+  const graceActive = !!graceUntil && !!now && new Date(graceUntil).getTime() > now;
   const close = async () => {
     setBusy(true); setErr(null);
     const res = await terminateSession(session.id);
@@ -138,6 +162,28 @@ function DetailPanel({
             </span>
           </div>
 
+          {status === "IN_PROGRESS" && pendingHelp && (
+            <div role="alert" className="rounded-xl border-2 border-sky-300 bg-sky-50 p-4 text-sm text-sky-950">
+              <p className="flex items-center gap-2 font-semibold"><HandHelping className="h-5 w-5" aria-hidden="true" /> Pide ayuda</p>
+              <p className="mt-1">{helpText ?? "Sin detalle"}</p>
+              {canTerminate && (
+                <div className="mt-3 flex flex-wrap gap-2">
+                  <button type="button" disabled={busy} onClick={() => run(() => grantLeave(session.id), "Salida de 2 minutos autorizada. Avísale por el micrófono.")} className="cursor-pointer rounded-lg bg-sky-700 px-3 py-1.5 text-xs font-semibold text-white hover:bg-sky-800 disabled:opacity-50">Autorizar salida de 2 min</button>
+                  <button type="button" disabled={busy} onClick={() => run(() => attendHelp(session.id), "Solicitud marcada como atendida.")} className="cursor-pointer rounded-lg border border-sky-400 bg-white px-3 py-1.5 text-xs font-semibold text-sky-900 hover:bg-sky-100 disabled:opacity-50">Atendida</button>
+                </div>
+              )}
+            </div>
+          )}
+          {status === "IN_PROGRESS" && !pendingHelp && graceActive && (
+            <p role="status" className="rounded-lg bg-emerald-50 p-3 text-sm font-medium text-emerald-900">Salida autorizada vigente hasta {fmtDateTimeSec(graceUntil)}: salir de la ventana no suma infracción.</p>
+          )}
+          {status === "IN_PROGRESS" && !pendingHelp && !graceActive && canTerminate && (
+            <button type="button" disabled={busy} onClick={() => run(() => grantLeave(session.id), "Salida de 2 minutos autorizada. Avísale por el micrófono.")} className="inline-flex cursor-pointer items-center gap-1.5 rounded-lg border border-emerald-300 px-3 py-1.5 text-xs font-semibold text-emerald-800 hover:bg-emerald-50 disabled:opacity-50">
+              Autorizar salida de 2 min (p. ej. revisar Zoom)
+            </button>
+          )}
+          {note && <p role="status" className="rounded-lg bg-emerald-50 p-3 text-sm text-emerald-900">{note}</p>}
+
           {(reachedLimit || status === "TERMINATED") && (
             <div role="alert" className="flex items-start gap-3 rounded-xl border-2 border-red-300 bg-red-50 p-4 text-sm text-red-900">
               <Video className="mt-0.5 h-5 w-5 shrink-0" aria-hidden="true" />
@@ -159,16 +205,33 @@ function DetailPanel({
             ) : (
               <ol className="space-y-2">
                 {data.auditLogs.map((l) => {
-                  const strike = STRIKE_TYPES.has(l.type);
-                  const tone = l.severity === "CRITICAL" ? "border-red-300 bg-red-50 text-red-800" : strike ? "border-amber-300 bg-amber-50 text-amber-900" : SOFT_TYPES.has(l.type) ? "border-slate-200 bg-slate-50 text-slate-700" : "border-slate-100 bg-white text-slate-600";
+                  const strike = STRIKE_TYPES.has(l.type) && l.severity !== "INFO";
+                  const excused = STRIKE_TYPES.has(l.type) && l.severity === "INFO";
+                  const voided = !!l.voidedAt;
+                  const tone = voided ? "border-slate-200 bg-slate-50 text-slate-500" : excused || l.type === "GRACE_GRANTED" || l.type === "HELP_ATTENDED" ? "border-emerald-200 bg-emerald-50 text-emerald-900" : l.type === "HELP_REQUEST" ? "border-sky-300 bg-sky-50 text-sky-900" : l.severity === "CRITICAL" ? "border-red-300 bg-red-50 text-red-800" : strike ? "border-amber-300 bg-amber-50 text-amber-900" : SOFT_TYPES.has(l.type) ? "border-slate-200 bg-slate-50 text-slate-700" : "border-slate-100 bg-white text-slate-600";
                   return (
                     <li key={l.id} className={`rounded-lg border px-3 py-2 text-sm ${tone}`}>
                       <div className="flex items-baseline justify-between gap-3">
-                        <span className="font-medium">{EVENT_LABEL[l.type] ?? l.type}{strike && <span className="ml-2 text-xs font-semibold uppercase">Infracción</span>}</span>
+                        <span className={`font-medium ${voided ? "line-through" : ""}`}>{EVENT_LABEL[l.type] ?? l.type}{strike && !voided && <span className="ml-2 text-xs font-semibold uppercase">Infracción</span>}{excused && <span className="ml-2 text-xs font-semibold uppercase">Autorizada</span>}{voided && <span className="ml-2 text-xs font-semibold uppercase no-underline">Anulada</span>}</span>
                         <time className="shrink-0 font-mono text-xs tabular-nums">{fmtDateTimeSec(l.createdAt)}</time>
                       </div>
                       {l.details && <p className="mt-0.5 text-xs opacity-80">{l.details}</p>}
+                      {voided && <p className="mt-0.5 text-xs">Anulada por {l.voidedBy ?? "la Junta"}: {l.voidReason}</p>}
                       <p className="mt-0.5 text-xs opacity-60">{now ? timeAgo(l.createdAt, now) : ""}</p>
+                      {canTerminate && strike && !voided && (
+                        voidFor === l.id ? (
+                          <div className="mt-2 space-y-2 border-t border-amber-200 pt-2">
+                            <label htmlFor={`vr-${l.id}`} className="block text-xs font-medium">Motivo de la anulación (queda en el acta y la bitácora)</label>
+                            <input id={`vr-${l.id}`} value={voidReason} onChange={(e) => setVoidReason(e.target.value)} placeholder="Ej.: autorizado por micrófono para revisar Zoom" className="block w-full rounded-lg border border-slate-300 bg-white px-2.5 py-1.5 text-xs text-slate-900 outline-none focus:border-asigbo-blue" />
+                            <div className="flex gap-2">
+                              <button type="button" disabled={busy || voidReason.trim().length < 5} onClick={async () => { await run(() => voidInfraction(session.id, l.id, voidReason), "Infracción anulada."); setVoidFor(null); setVoidReason(""); }} className="cursor-pointer rounded-lg bg-slate-800 px-3 py-1 text-xs font-semibold text-white hover:bg-slate-900 disabled:opacity-50">Anular infracción</button>
+                              <button type="button" onClick={() => { setVoidFor(null); setVoidReason(""); }} className="cursor-pointer rounded-lg px-2 py-1 text-xs font-medium hover:bg-amber-100">Cancelar</button>
+                            </div>
+                          </div>
+                        ) : (
+                          <button type="button" onClick={() => { setVoidFor(l.id); setVoidReason(""); }} className="mt-1.5 inline-flex cursor-pointer items-center gap-1 rounded-md border border-amber-300 bg-white px-2 py-1 text-xs font-medium text-amber-900 hover:bg-amber-100"><Undo2 className="h-3 w-3" aria-hidden="true" /> Anular</button>
+                        )
+                      )}
                     </li>
                   );
                 })}
@@ -228,24 +291,25 @@ export default function LiveDashboard({ canTerminate }: { canTerminate: boolean 
       for (const l of [...s.auditLogs].reverse()) {
         if (seen.current.has(l.id)) continue;
         seen.current.add(l.id);
-        const strike = STRIKE_TYPES.has(l.type);
-        if (!strike && !SOFT_TYPES.has(l.type)) continue;
+        const strike = STRIKE_TYPES.has(l.type) && l.severity !== "INFO";
+        const help = l.type === "HELP_REQUEST";
+        if (!strike && !help && !SOFT_TYPES.has(l.type)) continue;
         if (firstLoad) continue; // la primera carga no genera ruido
         fresh.push({
           id: l.id, sessionId: s.id, name: s.candidate.fullName, exam: s.exam.title,
           label: EVENT_LABEL[l.type] ?? l.type, detail: l.details,
-          kind: strike ? "strike" : "soft", strikeNo: strike ? Math.min(s.flagCount, MAX_STRIKES) : null,
+          kind: help ? "help" : strike ? "strike" : "soft", strikeNo: strike ? Math.min(s.flagCount, MAX_STRIKES) : null,
           at: new Date(l.createdAt).getTime(), read: false,
         });
       }
     }
     if (!fresh.length) return;
     setAlerts((prev) => [...fresh.reverse(), ...prev].slice(0, 40));
-    const strikes = fresh.filter((a) => a.kind === "strike");
+    const strikes = fresh.filter((a) => a.kind === "strike" || a.kind === "help");
     if (soundRef.current && strikes.length) beep();
     if (strikes.length && typeof Notification !== "undefined" && Notification.permission === "granted" && document.visibilityState !== "visible") {
       const a = strikes[0];
-      new Notification(`Infracción${a.strikeNo ? ` ${a.strikeNo}/${MAX_STRIKES}` : ""}: ${a.name}`, { body: a.label });
+      new Notification(a.kind === "help" ? `Pide ayuda: ${a.name}` : `Infracción${a.strikeNo ? ` ${a.strikeNo}/${MAX_STRIKES}` : ""}: ${a.name}`, { body: a.kind === "help" ? (a.detail ?? a.label) : a.label });
     }
   }, []);
 
@@ -263,10 +327,10 @@ export default function LiveDashboard({ canTerminate }: { canTerminate: boolean 
     return () => { clearTimeout(first); clearInterval(t); };
   }, []);
 
-  const unread = alerts.filter((a) => !a.read && a.kind === "strike").length;
+  const unread = alerts.filter((a) => !a.read && a.kind !== "soft").length;
   useEffect(() => {
     const base = "Monitoreo en vivo · ASIGBO Proctoring";
-    document.title = unread ? `(${unread}) ⚠ Infracción · ${base}` : base;
+    document.title = unread ? `(${unread}) ⚠ Atención · ${base}` : base;
     return () => { document.title = base; };
   }, [unread]);
 
@@ -337,6 +401,18 @@ export default function LiveDashboard({ canTerminate }: { canTerminate: boolean 
         </div>
       ))}
 
+      {/* Solicitudes de ayuda pendientes */}
+      {live.filter((s) => s.helpRequestedAt).map((s) => (
+        <div key={`help-${s.id}`} role="alert" className="flex flex-wrap items-center gap-3 rounded-2xl border-2 border-sky-300 bg-sky-50 p-4 text-sky-950 shadow-sm">
+          <HandHelping className="h-6 w-6 shrink-0" aria-hidden="true" />
+          <div className="min-w-0 flex-1">
+            <p className="font-semibold">{s.candidate.fullName} pide ayuda</p>
+            <p className="text-sm">{s.helpNote ?? "Sin detalle"}</p>
+          </div>
+          <button type="button" onClick={() => setSelectedId(s.id)} className="inline-flex cursor-pointer items-center gap-1.5 rounded-lg bg-sky-700 px-3.5 py-2 text-sm font-semibold text-white hover:bg-sky-800"><Eye className="h-4 w-4" aria-hidden="true" /> Atender</button>
+        </div>
+      ))}
+
       {/* Resumen */}
       <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
         {[
@@ -371,9 +447,9 @@ export default function LiveDashboard({ canTerminate }: { canTerminate: boolean 
         ) : (
           <ul className="max-h-64 divide-y divide-slate-100 overflow-y-auto">
             {alerts.map((a) => (
-              <li key={a.id} className={`flex flex-wrap items-center gap-3 px-5 py-3 text-sm ${a.kind === "strike" && !a.read ? "bg-amber-50" : ""}`}>
-                <span className={`rounded-full px-2.5 py-0.5 text-xs font-bold ${a.kind === "strike" ? (a.strikeNo === MAX_STRIKES ? "bg-red-600 text-white" : "bg-amber-500 text-white") : "bg-slate-200 text-slate-700"}`}>
-                  {a.kind === "strike" ? `${a.strikeNo}/${MAX_STRIKES}` : "Intento"}
+              <li key={a.id} className={`flex flex-wrap items-center gap-3 px-5 py-3 text-sm ${a.kind !== "soft" && !a.read ? (a.kind === "help" ? "bg-sky-50" : "bg-amber-50") : ""}`}>
+                <span className={`rounded-full px-2.5 py-0.5 text-xs font-bold ${a.kind === "help" ? "bg-sky-600 text-white" : a.kind === "strike" ? (a.strikeNo === MAX_STRIKES ? "bg-red-600 text-white" : "bg-amber-500 text-white") : "bg-slate-200 text-slate-700"}`}>
+                  {a.kind === "help" ? "Ayuda" : a.kind === "strike" ? `${a.strikeNo}/${MAX_STRIKES}` : "Intento"}
                 </span>
                 <div className="min-w-0 flex-1">
                   <p><span className="font-semibold">{a.name}</span> · {a.label}</p>
@@ -446,6 +522,8 @@ export default function LiveDashboard({ canTerminate }: { canTerminate: boolean 
                     <td className="px-5 py-3 align-top">
                       <p className="font-semibold">{s.candidate.fullName}</p>
                       <p className="text-xs text-slate-500">{s.candidate.studentId ?? s.candidate.email}</p>
+                      {s.status === "IN_PROGRESS" && s.helpRequestedAt && <span className="mt-1 inline-flex items-center gap-1 rounded-full bg-sky-600 px-2 py-0.5 text-xs font-semibold text-white"><HandHelping className="h-3 w-3" aria-hidden="true" /> Pide ayuda</span>}
+                      {s.status === "IN_PROGRESS" && s.graceUntil && now > 0 && new Date(s.graceUntil).getTime() > now && <span className="mt-1 inline-flex rounded-full bg-emerald-100 px-2 py-0.5 text-xs font-semibold text-emerald-800">Salida autorizada</span>}
                     </td>
                     <td className="px-4 py-3 align-top text-slate-700">{s.exam.title}</td>
                     <td className="px-4 py-3 align-top">

@@ -80,7 +80,7 @@ export async function startSession(sessionId: string): Promise<StartSessionResul
 }
 
 export type InfractionResult =
-  | { ok: true; flagCount: number; terminated: boolean; strike: boolean }
+  | { ok: true; flagCount: number; terminated: boolean; strike: boolean; excused?: boolean }
   | { ok: false; error: string };
 
 /**
@@ -100,12 +100,18 @@ export async function logInfraction(
     return await prisma.$transaction(async (tx) => {
       const current = await tx.candidateSession.findUnique({
         where: { id: sessionId },
-        select: { status: true, flagCount: true },
+        select: { status: true, flagCount: true, graceUntil: true },
       });
       if (!current) return { ok: false as const, error: "Sesión no encontrada." };
       if (current.status === "TERMINATED")
         return { ok: true as const, flagCount: current.flagCount, terminated: true, strike: false };
       if (current.status !== "IN_PROGRESS") return { ok: false as const, error: "La sesión no está activa." };
+
+      // Salida autorizada por la Junta (p. ej. consultar Zoom): se registra, pero no suma infracción.
+      if (isStrike && current.graceUntil && current.graceUntil.getTime() > Date.now()) {
+        await tx.auditLog.create({ data: { sessionId, type, severity: "INFO", details: `Salida autorizada por la Junta. ${details ?? ""}`.trim().slice(0, 500) } });
+        return { ok: true as const, flagCount: current.flagCount, terminated: false, strike: false, excused: true };
+      }
 
       const updated = await tx.candidateSession.update({
         where: { id: sessionId },
@@ -142,6 +148,48 @@ export async function logInfraction(
   } catch (e) {
     console.error(e);
     return { ok: false, error: "No se pudo registrar la incidencia." };
+  }
+}
+
+const HELP_REASONS: Record<string, string> = {
+  TECH: "Problema técnico",
+  QUESTION: "Duda sobre una pregunta",
+  ZOOM: "Necesito revisar Zoom o el chat",
+  OTHER: "Otro motivo",
+};
+const HELP_COOLDOWN_MS = 60_000;
+
+/** El candidato pide ayuda a la Junta sin salir del examen. Una solicitud pendiente a la vez y una por minuto. */
+export async function requestHelp(sessionId: string, reason: string, note?: string): Promise<{ ok: true } | { ok: false; error: string }> {
+  const label = HELP_REASONS[reason];
+  if (!label) return { ok: false, error: "Elige un motivo." };
+  const text = note?.trim().slice(0, 200) ?? "";
+  try {
+    const s = await prisma.candidateSession.findUnique({ where: { id: sessionId }, select: { status: true, helpRequestedAt: true } });
+    if (!s || s.status !== "IN_PROGRESS") return { ok: false, error: "La sesión no está activa." };
+    if (s.helpRequestedAt && Date.now() - s.helpRequestedAt.getTime() < HELP_COOLDOWN_MS)
+      return { ok: false, error: "Ya enviaste una solicitud hace un momento. La Junta la verá enseguida; habla por el micrófono si es urgente." };
+    const detail = text ? `${label}: ${text}` : label;
+    await prisma.$transaction([
+      prisma.candidateSession.update({ where: { id: sessionId }, data: { helpRequestedAt: new Date(), helpNote: detail } }),
+      prisma.auditLog.create({ data: { sessionId, type: "HELP_REQUEST", severity: "INFO", details: detail } }),
+    ]);
+    return { ok: true };
+  } catch (e) {
+    console.error(e);
+    return { ok: false, error: "No se pudo enviar la solicitud. Habla por el micrófono." };
+  }
+}
+
+/** Estado de la ayuda para el candidato: si hay una salida autorizada vigente y si su solicitud sigue pendiente. */
+export async function getHelpState(sessionId: string): Promise<{ ok: true; graceUntil: string | null; pending: boolean; serverNow: string } | { ok: false }> {
+  try {
+    const s = await prisma.candidateSession.findUnique({ where: { id: sessionId }, select: { graceUntil: true, helpRequestedAt: true, status: true } });
+    if (!s) return { ok: false };
+    const g = s.graceUntil && s.graceUntil.getTime() > Date.now() ? s.graceUntil.toISOString() : null;
+    return { ok: true, graceUntil: g, pending: !!s.helpRequestedAt && s.status === "IN_PROGRESS", serverNow: new Date().toISOString() };
+  } catch {
+    return { ok: false };
   }
 }
 

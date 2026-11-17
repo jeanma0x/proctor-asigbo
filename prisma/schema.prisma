@@ -43,6 +43,10 @@ enum AuditEventType {
   CUT_ATTEMPT
   CONTEXT_MENU
   OTHER
+  HELP_REQUEST
+  HELP_ATTENDED
+  GRACE_GRANTED
+  STRIKE_VOIDED
 }
 
 enum AuditSeverity {
@@ -189,6 +193,11 @@ model CandidateSession {
   decidedAt   DateTime?
   /// Quién tomó la decisión (correo del administrador)
   decidedBy   String?
+  /// Salida autorizada por la Junta: hasta este instante las salidas de la ventana no cuentan como infracción
+  graceUntil  DateTime?
+  /// Solicitud de ayuda pendiente del candidato (motivo y texto) hasta que la Junta la atiende
+  helpRequestedAt DateTime?
+  helpNote    String?
   createdAt   DateTime      @default(now())
   updatedAt   DateTime      @updatedAt
 
@@ -230,6 +239,10 @@ model AuditLog {
   severity  AuditSeverity  @default(WARNING)
   details   String?
   createdAt DateTime       @default(now())
+  /// Infracción anulada por la Junta (con motivo): no cuenta, pero se conserva en el historial
+  voidedAt   DateTime?
+  voidedBy   String?
+  voidReason String?
 
   session CandidateSession @relation(fields: [sessionId], references: [id], onDelete: Cascade)
 

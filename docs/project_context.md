@@ -19,6 +19,7 @@ Sistema de evaluación en línea, seguro y con trazabilidad, para el proceso de 
 
 ## 4. Reglas de negocio
 - El tiempo lo controla el servidor; la ventana de apertura/cierre solo restringe el inicio.
+- La Junta puede autorizar una salida breve (2 min) o anular una infracción con motivo; el candidato puede pedir ayuda sin salir del examen.
 - Máximo **3 advertencias** (`MAX_STRIKES`); a la tercera la sesión pasa a `TERMINATED` y no clasifica.
 - Un intento por candidato y examen. Reiniciar descarta el intento anterior (queda registrado en bitácora).
 - Un examen con candidatos que ya iniciaron no se puede borrar ni cambiar de convocatoria; sus preguntas quedan bloqueadas para no alterar resultados.

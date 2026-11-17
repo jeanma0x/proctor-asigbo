@@ -61,6 +61,12 @@ Dashboard · Exámenes (lista, editar, duplicar, publicar/cerrar, eliminar) · C
 ## 7. Monitoreo en vivo
 Polling con SWR cada 3 s (`actions/live.ts`); Vercel serverless no mantiene WebSockets. Alternativa futura: Pusher. Al detectar una infracción nueva el panel la muestra en el feed «Infracciones en vivo», con opción de sonido/notificación del navegador y contador en el título de la pestaña. Al llegar a 3 infracciones aparece un aviso para pedir al candidato que salga de Zoom. El panel «Detalle» da la línea de tiempo con segundos y un **acta** copiable que justifica el cierre (`getSessionDetail`).
 
+### Ayuda, salidas autorizadas y anulaciones
+- **Pedir ayuda** (candidato): botón en la barra del examen, con motivo y texto opcional (`requestHelp`, una solicitud por minuto). La Junta la ve como banner y en el feed, con sonido.
+- **Autorizar salida de 2 min** (`grantLeave`, permiso `live:terminate`): durante la ventana (`graceUntil`) `logInfraction` registra la salida como «autorizada» y **no suma infracción**. El candidato ve una cuenta regresiva (consulta `getHelpState` cada 4 s tras pedir ayuda).
+- **Anular infracción** (`voidInfraction`): exige motivo; baja `flagCount`, conserva el evento marcado como anulado (`voidedAt/By/Reason`) y lo lista en el acta. Si el examen se había cerrado al llegar a 3 y la anulación lo deja por debajo, **solo un superadmin** puede reabrirlo y solo si aún queda tiempo (el reloj del servidor no se detiene). El candidato debe recargar su enlace.
+- Todo queda en la bitácora de acciones y en el historial del examen.
+
 ## 8. Variables de entorno
 | Variable | Uso |
 |---|---|

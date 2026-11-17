@@ -18,4 +18,8 @@ export const EVENT_LABEL: Record<string, string> = {
   CUT_ATTEMPT: "Intentó cortar contenido",
   CONTEXT_MENU: "Abrió el menú contextual",
   OTHER: "Otro evento",
+  HELP_REQUEST: "Pidió ayuda a la Junta",
+  HELP_ATTENDED: "La Junta atendió su solicitud",
+  GRACE_GRANTED: "Salida autorizada por la Junta",
+  STRIKE_VOIDED: "Infracción anulada por la Junta",
 };

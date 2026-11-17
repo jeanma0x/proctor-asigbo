@@ -1,7 +1,8 @@
 "use server";
 
 import { prisma } from "@/lib/prisma";
-import { hasPermission, UNAUTHORIZED } from "@/lib/require-admin";
+import { getAdmin, hasPermission, UNAUTHORIZED } from "@/lib/require-admin";
+import { MAX_STRIKES } from "@/lib/proctor-constants";
 import { logAction } from "@/lib/audit";
 
 /** Cuántos eventos recientes se traen por sesión en curso. */
@@ -83,10 +84,92 @@ export async function getSessionDetail(sessionId: string) {
   return prisma.candidateSession.findUnique({
     where: { id: sessionId },
     select: {
-      status: true, flagCount: true, startedAt: true, submittedAt: true,
+      status: true, flagCount: true, startedAt: true, submittedAt: true, graceUntil: true, helpRequestedAt: true, helpNote: true,
       candidate: { select: { fullName: true, email: true } },
       exam: { select: { title: true, durationMinutes: true } },
-      auditLogs: { orderBy: { createdAt: "asc" }, take: 300, select: { id: true, type: true, severity: true, details: true, createdAt: true } },
+      auditLogs: { orderBy: { createdAt: "asc" }, take: 300, select: { id: true, type: true, severity: true, details: true, createdAt: true, voidedAt: true, voidedBy: true, voidReason: true } },
     },
   });
+}
+
+type Res = { ok: true } | { ok: false; error: string };
+const GRACE_MINUTES = 2;
+
+/** La Junta atiende la solicitud de ayuda (por ejemplo resolviéndola por el micrófono). */
+export async function attendHelp(sessionId: string): Promise<Res> {
+  if (!(await hasPermission("live:terminate"))) return { ok: false, error: UNAUTHORIZED };
+  try {
+    const s = await prisma.candidateSession.findUnique({ where: { id: sessionId }, select: { helpRequestedAt: true, candidate: { select: { fullName: true } } } });
+    if (!s?.helpRequestedAt) return { ok: false, error: "No hay una solicitud pendiente." };
+    await prisma.$transaction([
+      prisma.candidateSession.update({ where: { id: sessionId }, data: { helpRequestedAt: null, helpNote: null } }),
+      prisma.auditLog.create({ data: { sessionId, type: "HELP_ATTENDED", severity: "INFO", details: "La Junta atendió la solicitud de ayuda" } }),
+    ]);
+    await logAction({ action: "live.help_attended", entityType: "session", entityId: sessionId, summary: `Atendió la solicitud de ayuda de ${s.candidate.fullName}` });
+    return { ok: true };
+  } catch (e) {
+    console.error(e);
+    return { ok: false, error: "No se pudo marcar como atendida." };
+  }
+}
+
+/** Autoriza una salida breve: durante unos minutos salir de la ventana (p. ej. a Zoom) no cuenta como infracción. */
+export async function grantLeave(sessionId: string): Promise<Res & { until?: string }> {
+  if (!(await hasPermission("live:terminate"))) return { ok: false, error: UNAUTHORIZED };
+  try {
+    const s = await prisma.candidateSession.findUnique({ where: { id: sessionId }, select: { status: true, candidate: { select: { fullName: true } } } });
+    if (!s) return { ok: false, error: "La sesión no existe." };
+    if (s.status !== "IN_PROGRESS") return { ok: false, error: "El examen ya no está en curso." };
+    const until = new Date(Date.now() + GRACE_MINUTES * 60_000);
+    await prisma.$transaction([
+      prisma.candidateSession.update({ where: { id: sessionId }, data: { graceUntil: until, helpRequestedAt: null, helpNote: null } }),
+      prisma.auditLog.create({ data: { sessionId, type: "GRACE_GRANTED", severity: "INFO", details: `La Junta autorizó una salida de ${GRACE_MINUTES} minutos` } }),
+    ]);
+    await logAction({ action: "live.grant_leave", entityType: "session", entityId: sessionId, summary: `Autorizó ${GRACE_MINUTES} minutos de salida a ${s.candidate.fullName}` });
+    return { ok: true, until: until.toISOString() };
+  } catch (e) {
+    console.error(e);
+    return { ok: false, error: "No se pudo autorizar la salida." };
+  }
+}
+
+/**
+ * Anula una infracción con justificación: baja el contador, conserva el evento marcado como anulado y registra quién y por qué.
+ * Si el examen se había cerrado automáticamente por llegar a 3 y la anulación lo deja por debajo, solo un superadmin puede
+ * reabrirlo (el reloj del servidor sigue corriendo; si ya venció el tiempo, no se puede reabrir).
+ */
+export async function voidInfraction(sessionId: string, logId: string, reason: string): Promise<Res & { reopened?: boolean }> {
+  if (!(await hasPermission("live:terminate"))) return { ok: false, error: UNAUTHORIZED };
+  const why = reason?.trim().replace(/\s+/g, " ").slice(0, 300);
+  if (!why || why.length < 5) return { ok: false, error: "Escribe el motivo (mínimo 5 caracteres)." };
+  const admin = await getAdmin();
+  try {
+    const s = await prisma.candidateSession.findUnique({
+      where: { id: sessionId },
+      select: { status: true, flagCount: true, startedAt: true, exam: { select: { durationMinutes: true } }, candidate: { select: { fullName: true } } },
+    });
+    if (!s) return { ok: false, error: "La sesión no existe." };
+    const log = await prisma.auditLog.findFirst({ where: { id: logId, sessionId, type: { in: ["TAB_CHANGE", "WINDOW_BLUR", "FULLSCREEN_EXIT"] }, severity: { not: "INFO" } }, select: { id: true, voidedAt: true, type: true } });
+    if (!log) return { ok: false, error: "Ese evento no es una infracción que cuente." };
+    if (log.voidedAt) return { ok: false, error: "Esa infracción ya fue anulada." };
+
+    const next = Math.max(0, s.flagCount - 1);
+    const wasAutoClosed = s.status === "TERMINATED" && s.flagCount >= MAX_STRIKES;
+    const reopen = wasAutoClosed && next < MAX_STRIKES;
+    if (reopen) {
+      if (!(await hasPermission("users:manage"))) return { ok: false, error: "El examen se cerró al llegar a 3 infracciones: solo un superadmin puede anular y reabrirlo." };
+      const deadline = s.startedAt ? s.startedAt.getTime() + s.exam.durationMinutes * 60_000 : 0;
+      if (!deadline || Date.now() > deadline) return { ok: false, error: "No se puede reabrir: el tiempo del examen ya terminó." };
+    }
+    await prisma.$transaction([
+      prisma.auditLog.update({ where: { id: logId }, data: { voidedAt: new Date(), voidedBy: admin?.email ?? null, voidReason: why } }),
+      prisma.candidateSession.update({ where: { id: sessionId }, data: { flagCount: next, ...(reopen ? { status: "IN_PROGRESS", submittedAt: null } : {}) } }),
+      prisma.auditLog.create({ data: { sessionId, type: "STRIKE_VOIDED", severity: "INFO", details: `Infracción anulada por ${admin?.email ?? "la Junta"}: ${why}${reopen ? " · Examen reabierto" : ""}` } }),
+    ]);
+    await logAction({ action: "live.void_infraction", entityType: "session", entityId: sessionId, summary: `Anuló una infracción de ${s.candidate.fullName} (${why})${reopen ? " y reabrió su examen" : ""}` });
+    return { ok: true, reopened: reopen };
+  } catch (e) {
+    console.error(e);
+    return { ok: false, error: "No se pudo anular la infracción." };
+  }
 }
