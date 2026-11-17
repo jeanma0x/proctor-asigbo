@@ -100,7 +100,6 @@ export default function ProctorWrapper({
 
   // Salida autorizada por la Junta (instante en hora del servidor) y consulta tras pedir ayuda.
   const [graceUntilMs, setGraceUntilMs] = useState<number | null>(null);
-  const [helpWatch, setHelpWatch] = useState(false);
   const [graceLeft, setGraceLeft] = useState(0);
   const graceRef = useRef<number | null>(null);
   const offsetRef = useRef(0);
@@ -155,25 +154,34 @@ export default function ProctorWrapper({
     [sessionId],
   );
 
-  const markHelpRequested = useCallback(() => setHelpWatch(true), []);
+  // La consulta de estado ya corre todo el examen; se conserva la función por compatibilidad con ExamForm.
+  const markHelpRequested = useCallback(() => {}, []);
 
-  // Tras pedir ayuda se consulta cada 4 s si la Junta autorizó una salida; se detiene cuando ya no hay nada pendiente.
+  // Mientras el examen está activo se consulta cada 4 s el estado en el servidor: así el candidato se entera enseguida
+  // de que la Junta autorizó una salida o cerró su examen, sin esperar a su próxima acción.
   useEffect(() => {
-    if (phase !== "active" || !helpWatch) return;
+    if (phase !== "active") return;
     let alive = true;
     const poll = async () => {
       const r = await getHelpState(sessionId);
       if (!alive || !r.ok) return;
+      if (r.status === "TERMINATED") {
+        strikesRef.current = r.flagCount;
+        setStrikes(r.flagCount);
+        setWarning(null);
+        setPhaseBoth("terminated");
+        exitFullscreen();
+        return;
+      }
       offsetRef.current = new Date(r.serverNow).getTime() - Date.now();
       const g = r.graceUntil ? new Date(r.graceUntil).getTime() : null;
       graceRef.current = g;
       setGraceUntilMs(g);
-      if (!r.pending && !g) setHelpWatch(false);
     };
     void poll();
     const t = setInterval(poll, 4000);
     return () => { alive = false; clearInterval(t); };
-  }, [phase, helpWatch, sessionId]);
+  }, [phase, sessionId, setPhaseBoth, exitFullscreen]);
 
   // Cuenta regresiva visible de la salida autorizada.
   useEffect(() => {
@@ -310,7 +318,9 @@ export default function ProctorWrapper({
           <Ban className="mx-auto mb-5 h-12 w-12 text-amber-600" aria-hidden="true" />
           <h1 className="font-serif text-3xl font-semibold text-slate-900">Tu examen se cerró</h1>
           <p className="mt-4 text-lg leading-relaxed text-slate-700">
-            Se registraron {MAX_STRIKES} advertencias de seguridad y, por las reglas del examen, la sesión terminó automáticamente.
+            {strikes >= MAX_STRIKES
+              ? `Se registraron ${MAX_STRIKES} advertencias de seguridad y, por las reglas del examen, la sesión terminó automáticamente.`
+              : "La Junta Directiva de ASIGBO cerró tu examen."}
           </p>
           <p className="mt-3 text-base leading-relaxed text-slate-600">
             La Junta Directiva revisará lo ocurrido y se pondrá en contacto contigo. Ya puedes cerrar esta ventana.

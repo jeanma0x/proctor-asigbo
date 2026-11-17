@@ -182,12 +182,12 @@ export async function requestHelp(sessionId: string, reason: string, note?: stri
 }
 
 /** Estado de la ayuda para el candidato: si hay una salida autorizada vigente y si su solicitud sigue pendiente. */
-export async function getHelpState(sessionId: string): Promise<{ ok: true; graceUntil: string | null; pending: boolean; serverNow: string } | { ok: false }> {
+export async function getHelpState(sessionId: string): Promise<{ ok: true; graceUntil: string | null; pending: boolean; serverNow: string; status: string; flagCount: number } | { ok: false }> {
   try {
-    const s = await prisma.candidateSession.findUnique({ where: { id: sessionId }, select: { graceUntil: true, helpRequestedAt: true, status: true } });
+    const s = await prisma.candidateSession.findUnique({ where: { id: sessionId }, select: { graceUntil: true, helpRequestedAt: true, status: true, flagCount: true } });
     if (!s) return { ok: false };
     const g = s.graceUntil && s.graceUntil.getTime() > Date.now() ? s.graceUntil.toISOString() : null;
-    return { ok: true, graceUntil: g, pending: !!s.helpRequestedAt && s.status === "IN_PROGRESS", serverNow: new Date().toISOString() };
+    return { ok: true, graceUntil: g, pending: !!s.helpRequestedAt && s.status === "IN_PROGRESS", serverNow: new Date().toISOString(), status: s.status, flagCount: s.flagCount };
   } catch {
     return { ok: false };
   }
