@@ -1,18 +1,21 @@
 "use client";
 
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, useState } from "react";
 import { AlertTriangle, Info, Loader2 } from "lucide-react";
 import { btnGhost, btnPrimary } from "@/components/admin/ui";
 
 /** Modal de confirmación común: Esc cancela, el foco inicia en «Cancelar» (la opción segura) y se queda dentro del diálogo. */
 export default function ConfirmDialog({
-  open, title, description, confirmLabel = "Confirmar", tone = "primary", busy = false, onConfirm, onCancel,
+  open, title, description, confirmLabel = "Confirmar", tone = "primary", busy = false, requireText, onConfirm, onCancel,
 }: {
   open: boolean; title: string; description: React.ReactNode; confirmLabel?: string;
-  tone?: "primary" | "danger"; busy?: boolean; onConfirm: () => void; onCancel: () => void;
+  tone?: "primary" | "danger"; busy?: boolean; requireText?: string; onConfirm: () => void; onCancel: () => void;
 }) {
+  const [typed, setTyped] = useState("");
   const cancelRef = useRef<HTMLButtonElement>(null);
   const boxRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => { if (!open) setTyped(""); }, [open]);
 
   useEffect(() => {
     if (!open) return;
@@ -46,9 +49,15 @@ export default function ConfirmDialog({
             <div id="cd-desc" className="mt-1 text-sm leading-relaxed text-slate-600">{description}</div>
           </div>
         </div>
+        {requireText && (
+          <div className="mt-4">
+            <label htmlFor="cd-typed" className="text-xs font-medium text-slate-700">Escribe exactamente <span className="font-mono font-semibold">{requireText}</span> para confirmar</label>
+            <input id="cd-typed" value={typed} onChange={(e) => setTyped(e.target.value)} autoComplete="off" className="mt-1 block w-full rounded-xl border border-slate-300 px-3.5 py-2.5 text-sm outline-none focus:border-red-400 focus:ring-2 focus:ring-red-200" />
+          </div>
+        )}
         <div className="mt-6 flex justify-end gap-2">
           <button ref={cancelRef} type="button" onClick={onCancel} disabled={busy} className={btnGhost}>Cancelar</button>
-          <button type="button" onClick={onConfirm} disabled={busy} className={danger ? "inline-flex cursor-pointer items-center gap-2 rounded-xl bg-red-600 px-4 py-2.5 text-sm font-semibold text-white transition-colors hover:bg-red-700 disabled:opacity-50" : btnPrimary}>
+          <button type="button" onClick={onConfirm} disabled={busy || (!!requireText && typed.trim() !== requireText)} className={danger ? "inline-flex cursor-pointer items-center gap-2 rounded-xl bg-red-600 px-4 py-2.5 text-sm font-semibold text-white transition-colors hover:bg-red-700 disabled:opacity-50" : btnPrimary}>
             {busy && <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" />} {confirmLabel}
           </button>
         </div>

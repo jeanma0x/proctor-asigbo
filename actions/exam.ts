@@ -1,7 +1,7 @@
 "use server";
 
 import { canonicalHeader, correctIndex } from "@/lib/csv-exam";
-import { sectionFields } from "@/lib/exam-prepare";
+import { questionContentIssue, sectionFields } from "@/lib/exam-prepare";
 import { randomUUID } from "crypto";
 import { revalidatePath } from "next/cache";
 import { prisma } from "@/lib/prisma";
@@ -100,8 +100,14 @@ async function validConvocatoria(id: string | undefined): Promise<string | null>
   return null;
 }
 
+async function titleTaken(title: string, convocatoriaId: string): Promise<string | null> {
+  const dup = await prisma.exam.findFirst({ where: { convocatoriaId, title: { equals: title.trim(), mode: "insensitive" } }, select: { id: true } });
+  return dup ? "Ya existe un examen con ese título en esta convocatoria. Usa otro nombre o edita el existente." : null;
+}
+
 function validMeta(title: string, durationMinutes: number): string | null {
   if (!title?.trim()) return "El título del examen es obligatorio.";
+  if (title.trim().length > 200) return "El título es demasiado largo (máx. 200 caracteres).";
   if (!Number.isFinite(durationMinutes) || durationMinutes < 1 || durationMinutes > 600)
     return "La duración debe estar entre 1 y 600 minutos.";
   return null;
@@ -124,9 +130,10 @@ export async function createExamManual(input: CreateExamInput): Promise<ActionRe
   if (!(await hasPermission("exams:write"))) return { ok: false, error: UNAUTHORIZED };
   try {
     const w = parseWindow(input.opensAt, input.closesAt);
-    const metaError = validMeta(input.title, input.durationMinutes) ?? (w.ok ? null : w.error) ?? (await validConvocatoria(input.convocatoriaId));
+    const metaError = validMeta(input.title, input.durationMinutes) ?? (w.ok ? null : w.error) ?? (await validConvocatoria(input.convocatoriaId)) ?? (await titleTaken(input.title, input.convocatoriaId));
     if (metaError) return { ok: false, error: metaError };
     if (!input.questions?.length) return { ok: false, error: "Agrega al menos una pregunta." };
+    if (input.questions.length > 300) return { ok: false, error: "Máximo 300 preguntas por examen." };
 
     const questions: PreparedQuestion[] = [];
     const options: PreparedOption[] = [];
@@ -134,6 +141,8 @@ export async function createExamManual(input: CreateExamInput): Promise<ActionRe
     for (const [i, q] of input.questions.entries()) {
       const n = i + 1;
       if (!q.text?.trim()) return { ok: false, error: `Pregunta ${n}: el enunciado está vacío.` };
+      const issue = questionContentIssue({ text: q.text, points: q.points, type: q.type, options: q.options }, n);
+      if (issue) return { ok: false, error: issue };
       if (q.imageUrl?.trim() && !cleanUrl(q.imageUrl))
         return { ok: false, error: `Pregunta ${n}: la URL de imagen no es válida (http/https).` };
 
@@ -181,7 +190,7 @@ export async function importExamFromCsv(
   if (!(await hasPermission("exams:write"))) return { ok: false, error: UNAUTHORIZED };
   try {
     const w = parseWindow(meta.opensAt, meta.closesAt);
-    const metaError = validMeta(meta.title, meta.durationMinutes) ?? (w.ok ? null : w.error) ?? (await validConvocatoria(meta.convocatoriaId));
+    const metaError = validMeta(meta.title, meta.durationMinutes) ?? (w.ok ? null : w.error) ?? (await validConvocatoria(meta.convocatoriaId)) ?? (await titleTaken(meta.title, meta.convocatoriaId));
     if (metaError) return { ok: false, error: metaError };
     if (!rows?.length) return { ok: false, error: "El CSV no contiene filas." };
     if (rows.length > 1000) return { ok: false, error: "Máximo 1000 preguntas por CSV." };
@@ -217,6 +226,8 @@ export async function importExamFromCsv(
 
       if (type === "MULTIPLE_CHOICE") {
         const texts = OPTION_COLUMNS.map((c) => row[c]?.trim() ?? "");
+        const issue = questionContentIssue({ text, points: parseInt(row.Puntos ?? "1", 10) || 1, type, options: texts.filter(Boolean).map((t) => ({ text: t })) }, line - 1);
+        if (issue) return { ok: false, error: `Fila ${line}: ${issue.replace(/^Pregunta \d+: /, "")}` };
         const correctIdx = correctIndex(row.Correcta ?? "", texts);
         if (correctIdx < 0)
           return { ok: false, error: `Fila ${line}: la respuesta correcta debe ser A–D, 1–4 o coincidir exactamente con una sola de las opciones.` };

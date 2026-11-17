@@ -4,7 +4,7 @@ import { useState, useTransition, type FormEvent } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { AlertCircle, FileText, Loader2, Pencil, Send, Trash2 } from "lucide-react";
-import { addNote, deleteNote, updateCandidate, type CandidateProfile } from "@/actions/candidates";
+import { addNote, deleteCandidate, deleteNote, updateCandidate, type CandidateProfile } from "@/actions/candidates";
 import { setDecision } from "@/actions/ranking";
 import ConfirmDialog from "@/components/admin/ConfirmDialog";
 import PdfPreview from "@/components/admin/PdfPreview";
@@ -30,6 +30,8 @@ export default function CandidateProfileView({ p, meId, isSuper, canDecide, canG
   const [email, setEmail] = useState(p.email);
   const [note, setNote] = useState("");
 
+  const [askDelete, setAskDelete] = useState(false);
+  const hasHistory = p.sessions.some((s) => s.status !== "NOT_STARTED");
   const [askNote, setAskNote] = useState<string | null>(null);
   const run = (fn: () => Promise<{ ok: boolean; error?: string }>, after?: () => void) => {
     setError(null);
@@ -60,6 +62,7 @@ export default function CandidateProfileView({ p, meId, isSuper, canDecide, canG
             </div>
           </div>
           {canEdit && !editing && <button type="button" onClick={() => setEditing(true)} className={btnGhost}><Pencil className="h-4 w-4" aria-hidden="true" /> Corregir datos</button>}
+          {canEdit && !editing && <button type="button" onClick={() => setAskDelete(true)} disabled={hasHistory && !isSuper} title={hasHistory && !isSuper ? "Tiene exámenes iniciados: solo un superadmin puede eliminarlo" : "Eliminar candidato"} className={`${btnGhost} hover:!border-red-300 hover:!bg-red-50 hover:!text-red-700`}><Trash2 className="h-4 w-4" aria-hidden="true" /> Eliminar</button>}
         </div>
         {editing && (
           <form onSubmit={(e: FormEvent) => { e.preventDefault(); run(() => updateCandidate(p.id, { fullName: name, email }), () => setEditing(false)); }} className="mt-5 grid gap-3 rounded-xl bg-slate-50 p-4 sm:grid-cols-2">
@@ -159,6 +162,11 @@ export default function CandidateProfileView({ p, meId, isSuper, canDecide, canG
         )}
       </section>
       <ConfirmDialog open={!!askNote} title="Borrar nota" description="La nota se elimina del historial de esta persona y queda registrada en la bitácora." confirmLabel="Borrar nota" tone="danger" busy={pending} onCancel={() => setAskNote(null)} onConfirm={() => askNote && run(() => deleteNote(askNote), () => setAskNote(null))} />
+      <ConfirmDialog open={askDelete} tone="danger" busy={pending} requireText={hasHistory ? p.fullName : undefined}
+        title={`Eliminar a ${p.fullName}`}
+        description={hasHistory ? `Tiene ${p.sessions.filter((s) => s.status !== "NOT_STARTED").length} participación(es) con resultados. Se borran su perfil, respuestas, infracciones, decisiones y notas. No se puede deshacer.` : "Se borran su perfil, sus enlaces de examen y sus notas. Queda registrado en la bitácora."}
+        confirmLabel="Eliminar candidato" onCancel={() => setAskDelete(false)}
+        onConfirm={() => startTransition(async () => { const r = await deleteCandidate(p.id, hasHistory ? p.fullName : undefined); if (!r.ok) { setError(r.error); setAskDelete(false); return; } router.push("/admin/candidates"); router.refresh(); })} />
     </div>
   );
 }

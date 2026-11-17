@@ -107,6 +107,8 @@ export type UpdateExamInput = {
 export async function updateExam(examId: string, input: UpdateExamInput): Promise<Result> {
   if (!(await hasPermission("exams:write"))) return { ok: false, error: UNAUTHORIZED };
   if (!input.title?.trim()) return { ok: false, error: "El título del examen es obligatorio." };
+  if (input.title.trim().length > 200) return { ok: false, error: "El título es demasiado largo (máx. 200 caracteres)." };
+  if ((input.description?.length ?? 0) > 3000) return { ok: false, error: "La descripción es demasiado larga (máx. 3000 caracteres)." };
   if (!Number.isFinite(input.durationMinutes) || input.durationMinutes < 1 || input.durationMinutes > 600)
     return { ok: false, error: "La duración debe estar entre 1 y 600 minutos." };
   try {
@@ -125,6 +127,8 @@ export async function updateExam(examId: string, input: UpdateExamInput): Promis
 
     const w = parseWindow(input.opensAt, input.closesAt);
     if (!w.ok) return w;
+    const dup = await prisma.exam.findFirst({ where: { id: { not: examId }, convocatoriaId: input.convocatoriaId, title: { equals: input.title.trim(), mode: "insensitive" } }, select: { id: true } });
+    if (dup) return { ok: false, error: "Ya existe otro examen con ese título en esta convocatoria." };
 
     const meta = {
       opensAt: w.opensAt,
@@ -203,6 +207,11 @@ export async function setExamStatus(examId: string, status: "DRAFT" | "PUBLISHED
     });
     if (!exam) return { ok: false, error: "El examen no existe." };
     if (status === "PUBLISHED" && exam._count.questions === 0) return { ok: false, error: "El examen no tiene preguntas." };
+    if (status === "PUBLISHED") {
+      const qs = await prisma.question.findMany({ where: { examId, type: "MULTIPLE_CHOICE" }, select: { position: true, options: { select: { isCorrect: true } } } });
+      const bad = qs.find((q) => q.options.length < 2 || q.options.filter((o) => o.isCorrect).length !== 1);
+      if (bad) return { ok: false, error: `La pregunta ${bad.position + 1} no tiene al menos 2 opciones y exactamente una correcta. Corrígela antes de publicar.` };
+    }
     if (status === "DRAFT" && exam._count.sessions > 0) return { ok: false, error: "No se puede volver a borrador: ya hay candidatos que lo iniciaron. Ciérralo en su lugar." };
     await prisma.exam.update({ where: { id: examId }, data: { status } });
     await logAction({ action: "exam.status", entityType: "exam", entityId: examId, summary: `Cambió el estado del examen «${exam.title}» a ${({ DRAFT: "Borrador", PUBLISHED: "Publicado", CLOSED: "Cerrado" } as const)[status]}` });

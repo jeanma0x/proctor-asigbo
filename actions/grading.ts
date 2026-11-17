@@ -20,6 +20,8 @@ export async function gradeAnswer(sessionId: string, questionId: string, score: 
     });
     if (!q) return { ok: false, error: "La pregunta no es abierta o no pertenece a este examen." };
     if (!Number.isFinite(score) || score < 0 || score > q.points) return { ok: false, error: `La nota debe estar entre 0 y ${q.points}.` };
+    const st = await prisma.candidateSession.findUnique({ where: { id: sessionId }, select: { status: true } });
+    if (st?.status === "IN_PROGRESS" || st?.status === "NOT_STARTED") return { ok: false, error: "Solo se califica un examen ya entregado o cerrado." };
     const value = Math.round(score * 2) / 2;
     const admin = await getAdmin();
 

@@ -4,8 +4,9 @@ import { SkeletonRows } from "@/components/admin/skeletons";
 import { useState } from "react";
 import Link from "next/link";
 import useSWR from "swr";
-import { ChevronRight, MessageSquare, Search } from "lucide-react";
-import { listCandidates, type CandidateFilters } from "@/actions/candidates";
+import { ChevronRight, MessageSquare, Search, Trash2 } from "lucide-react";
+import { deleteCandidate, listCandidates, type CandidateFilters } from "@/actions/candidates";
+import ConfirmDialog from "@/components/admin/ConfirmDialog";
 import { card, inputCls } from "@/components/admin/ui";
 import { initials } from "@/lib/format";
 import { STATUS_LABEL } from "@/lib/labels";
@@ -16,18 +17,36 @@ export const DECISION: Record<"SELECTED" | "WAITLIST" | "NOT_SELECTED", { label:
   NOT_SELECTED: { label: "No seleccionado", cls: "bg-slate-200 text-slate-700" },
 };
 
-export default function CandidatesExplorer() {
+export default function CandidatesExplorer({ canEdit = false, isSuper = false }: { canEdit?: boolean; isSuper?: boolean }) {
   const [q, setQ] = useState("");
   const [convocatoriaId, setConvocatoriaId] = useState("");
   const [decision, setDecision] = useState<NonNullable<CandidateFilters["decision"]> | "">("");
   const [pendingOnly, setPendingOnly] = useState(false);
 
   const filters: CandidateFilters = { q: q.trim() || undefined, convocatoriaId: convocatoriaId || undefined, decision: decision || undefined, pendingOnly };
-  const { data, isLoading } = useSWR(["candidates", filters], () => listCandidates(filters), { keepPreviousData: true });
+  const { data, isLoading, mutate } = useSWR(["candidates", filters], () => listCandidates(filters), { keepPreviousData: true });
   const rows = data?.rows ?? [];
+  const [ask, setAsk] = useState<(typeof rows)[number] | null>(null);
+  const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState<string | null>(null);
+  const doDelete = async () => {
+    if (!ask) return;
+    setBusy(true); setErr(null);
+    const r = await deleteCandidate(ask.id, ask.participations > 0 ? ask.name : undefined);
+    setBusy(false);
+    if (!r.ok) setErr(r.error); else await mutate();
+    setAsk(null);
+  };
 
   return (
     <div className="space-y-6">
+      {err && <p role="alert" className="rounded-xl border border-red-200 bg-red-50 p-3 text-sm text-red-800">{err}</p>}
+      {ask && (
+        <ConfirmDialog open tone="danger" busy={busy} requireText={ask.participations > 0 ? ask.name : undefined}
+          title={`Eliminar a ${ask.name}`}
+          description={ask.participations > 0 ? `Tiene ${ask.participations} participación(es) con resultados. Se borran su perfil, respuestas, infracciones, decisiones y notas. No se puede deshacer.` : "Se borran su perfil, sus enlaces de examen y sus notas. Queda registrado en la bitácora."}
+          confirmLabel="Eliminar candidato" onCancel={() => setAsk(null)} onConfirm={doDelete} />
+      )}
       <section className={`${card} p-4`}>
         <div className="flex flex-wrap items-center gap-3">
           <div className="relative min-w-56 flex-1">
@@ -93,7 +112,9 @@ export default function CandidatesExplorer() {
                       {c.notes > 0 && <span className="inline-flex items-center gap-1 text-slate-600"><MessageSquare className="h-3.5 w-3.5" aria-hidden="true" /> {c.notes}</span>}
                     </div>
                   </td>
-                  <td className="px-4 py-3 text-right"><Link href={`/admin/candidates/${c.id}`} aria-label={`Abrir perfil de ${c.name}`} className="inline-flex rounded-lg p-1.5 text-slate-500 hover:bg-slate-100"><ChevronRight className="h-4 w-4" aria-hidden="true" /></Link></td>
+                  <td className="whitespace-nowrap px-4 py-3 text-right">
+                    {canEdit && <button type="button" onClick={() => setAsk(c)} disabled={c.participations > 0 && !isSuper} aria-label={`Eliminar a ${c.name}`} title={c.participations > 0 && !isSuper ? "Tiene exámenes iniciados: solo un superadmin puede eliminarlo" : "Eliminar candidato"} className="inline-flex cursor-pointer rounded-lg p-1.5 text-slate-400 hover:bg-red-50 hover:text-red-600 disabled:cursor-not-allowed disabled:opacity-30"><Trash2 className="h-4 w-4" aria-hidden="true" /></button>}
+                    <Link href={`/admin/candidates/${c.id}`} aria-label={`Abrir perfil de ${c.name}`} className="inline-flex rounded-lg p-1.5 text-slate-500 hover:bg-slate-100"><ChevronRight className="h-4 w-4" aria-hidden="true" /></Link></td>
                 </tr>
               ))}
             </tbody>

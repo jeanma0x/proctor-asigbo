@@ -98,6 +98,9 @@ export async function setDecision(sessionId: string, decision: Decision | null):
   if (!(await hasPermission("ranking:decide"))) return { ok: false, error: UNAUTHORIZED };
   if (decision !== null && !["SELECTED", "WAITLIST", "NOT_SELECTED"].includes(decision)) return { ok: false, error: "Decisión inválida." };
   try {
+    const st = await prisma.candidateSession.findUnique({ where: { id: sessionId }, select: { status: true } });
+    if (!st) return { ok: false, error: "La sesión no existe." };
+    if (st.status === "NOT_STARTED" || st.status === "IN_PROGRESS") return { ok: false, error: "Solo se puede decidir sobre quien ya entregó o cerró su examen." };
     const admin = await getAdmin();
     const row = await prisma.candidateSession.update({
       where: { id: sessionId },

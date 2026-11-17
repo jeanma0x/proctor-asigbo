@@ -200,8 +200,9 @@ export async function updateCandidate(id: string, input: { fullName: string; ema
   const fullName = input.fullName?.trim().replace(/\s+/g, " ").slice(0, 120);
   const email = input.email?.trim().toLowerCase();
   if (!fullName) return { ok: false, error: "El nombre es obligatorio." };
-  if (!email || !EMAIL_OK.test(email)) return { ok: false, error: "Correo inválido." };
+  if (!email || !EMAIL_OK.test(email) || email.length > 254) return { ok: false, error: "Correo inválido." };
   try {
+    if (!(await prisma.candidate.findUnique({ where: { id }, select: { id: true } }))) return { ok: false, error: "El candidato no existe." };
     const other = await prisma.candidate.findUnique({ where: { email }, select: { id: true } });
     if (other && other.id !== id) return { ok: false, error: "Ya existe otro candidato con ese correo." };
     const before = await prisma.candidate.findUnique({ where: { id }, select: { fullName: true, email: true } });
@@ -213,5 +214,29 @@ export async function updateCandidate(id: string, input: { fullName: string; ema
   } catch (e) {
     console.error(e);
     return { ok: false, error: "No se pudo actualizar el candidato." };
+  }
+}
+
+/**
+ * Elimina a un candidato. Sin participaciones iniciadas: se borra junto con sus enlaces y notas. Con historial
+ * (exámenes iniciados/entregados): solo un superadmin, escribiendo el nombre exacto, y se pierde todo su historial.
+ */
+export async function deleteCandidate(id: string, confirmName?: string): Promise<Res> {
+  if (!(await hasPermission("candidates:edit"))) return { ok: false, error: UNAUTHORIZED };
+  try {
+    const c = await prisma.candidate.findUnique({ where: { id }, select: { fullName: true, email: true, _count: { select: { notes: true, sessions: true } }, sessions: { where: { status: { not: "NOT_STARTED" } }, select: { id: true } } } });
+    if (!c) return { ok: false, error: "El candidato no existe." };
+    const started = c.sessions.length;
+    if (started > 0) {
+      if (!(await hasPermission("users:manage"))) return { ok: false, error: "Este candidato tiene exámenes iniciados o entregados: solo un superadmin puede eliminarlo con todo su historial." };
+      if ((confirmName ?? "").trim() !== c.fullName) return { ok: false, error: "El nombre escrito no coincide." };
+    }
+    await prisma.candidate.delete({ where: { id } }); // sesiones, respuestas, eventos y notas caen en cascada
+    await logAction({ action: "candidate.delete", entityType: "candidate", entityId: id, summary: `Eliminó al candidato ${c.fullName} <${c.email}> (${c._count.sessions} sesión(es), ${started} iniciada(s), ${c._count.notes} nota(s))` });
+    ["/admin/candidates", "/admin/sessions", "/admin/results", "/admin/ranking", "/admin/dashboard", "/admin/live"].forEach((p) => revalidatePath(p));
+    return { ok: true };
+  } catch (e) {
+    console.error(e);
+    return { ok: false, error: "No se pudo eliminar al candidato." };
   }
 }

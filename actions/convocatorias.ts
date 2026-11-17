@@ -69,6 +69,10 @@ export async function createConvocatoria(input: { name: string; year: number; de
 export async function setConvocatoriaStatus(id: string, status: "ACTIVE" | "ARCHIVED"): Promise<Result> {
   if (!(await hasPermission("convocatorias:manage"))) return { ok: false, error: UNAUTHORIZED };
   try {
+    if (status === "ARCHIVED") {
+      const live = await prisma.exam.count({ where: { convocatoriaId: id, status: "PUBLISHED" } });
+      if (live > 0) return { ok: false, error: `Tiene ${live} examen(es) publicado(s). Ciérralos antes de archivar la convocatoria.` };
+    }
     const c = await prisma.convocatoria.update({ where: { id }, data: { status }, select: { name: true } });
     await logAction({ action: "convocatoria.status", entityType: "convocatoria", entityId: id, summary: `${status === "ARCHIVED" ? "Archivó" : "Reactivó"} la convocatoria «${c.name}»` });
     revalidatePath("/admin/convocatorias");
