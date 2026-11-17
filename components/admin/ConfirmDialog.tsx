@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { AlertTriangle, Info, Loader2 } from "lucide-react";
 import { btnGhost, btnPrimary } from "@/components/admin/ui";
 
@@ -12,17 +12,16 @@ export default function ConfirmDialog({
   tone?: "primary" | "danger"; busy?: boolean; requireText?: string; onConfirm: () => void; onCancel: () => void;
 }) {
   const [typed, setTyped] = useState("");
+  const cancel = useCallback(() => { setTyped(""); onCancel(); }, [onCancel]);
   const cancelRef = useRef<HTMLButtonElement>(null);
   const boxRef = useRef<HTMLDivElement>(null);
-
-  useEffect(() => { if (!open) setTyped(""); }, [open]);
 
   useEffect(() => {
     if (!open) return;
     const prev = document.activeElement as HTMLElement | null;
     cancelRef.current?.focus();
     const onKey = (e: KeyboardEvent) => {
-      if (e.key === "Escape" && !busy) { e.stopPropagation(); onCancel(); }
+      if (e.key === "Escape" && !busy) { e.stopPropagation(); cancel(); }
       if (e.key === "Tab" && boxRef.current) {
         const f = boxRef.current.querySelectorAll<HTMLElement>("button:not([disabled])");
         if (!f.length) return;
@@ -33,14 +32,14 @@ export default function ConfirmDialog({
     };
     window.addEventListener("keydown", onKey, true);
     return () => { window.removeEventListener("keydown", onKey, true); prev?.focus?.(); };
-  }, [open, busy, onCancel]);
+  }, [open, busy, cancel]);
 
   if (!open) return null;
   const danger = tone === "danger";
   const Icon = danger ? AlertTriangle : Info;
   return (
     <div className="fixed inset-0 z-[60] flex items-center justify-center p-4" role="alertdialog" aria-modal="true" aria-labelledby="cd-title" aria-describedby="cd-desc">
-      <div className="absolute inset-0 bg-slate-900/50" onClick={() => !busy && onCancel()} aria-hidden="true" />
+      <div className="absolute inset-0 bg-slate-900/50" onClick={() => !busy && cancel()} aria-hidden="true" />
       <div ref={boxRef} className="relative w-full max-w-md rounded-2xl bg-white p-6 shadow-2xl">
         <div className="flex items-start gap-4">
           <span className={`flex h-11 w-11 shrink-0 items-center justify-center rounded-full ${danger ? "bg-red-100 text-red-600" : "bg-asigbo-blue/10 text-asigbo-blue"}`}><Icon className="h-5 w-5" aria-hidden="true" /></span>
@@ -56,7 +55,7 @@ export default function ConfirmDialog({
           </div>
         )}
         <div className="mt-6 flex justify-end gap-2">
-          <button ref={cancelRef} type="button" onClick={onCancel} disabled={busy} className={btnGhost}>Cancelar</button>
+          <button ref={cancelRef} type="button" onClick={cancel} disabled={busy} className={btnGhost}>Cancelar</button>
           <button type="button" onClick={onConfirm} disabled={busy || (!!requireText && typed.trim() !== requireText)} className={danger ? "inline-flex cursor-pointer items-center gap-2 rounded-xl bg-red-600 px-4 py-2.5 text-sm font-semibold text-white transition-colors hover:bg-red-700 disabled:opacity-50" : btnPrimary}>
             {busy && <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" />} {confirmLabel}
           </button>
