@@ -8,7 +8,7 @@ import {
   AlertCircle, Check, CheckCircle2, Copy, Download, FileUp, Info, Link2, Loader2, Mail, MessageCircle,
   Plus, RotateCcw, Rocket, Search, Send, Trash2, UserPlus, X,
 } from "lucide-react";
-import { generateSessions, listExamSessions, removeSession, resetSession, sendInvitations, type ExamSessionRow } from "@/actions/sessions";
+import { generateSessions, listExamSessions, clearExamSessions, removeSession, resetSession, sendInvitations, type ExamSessionRow } from "@/actions/sessions";
 import { publishExam } from "@/actions/exam";
 import ConfirmDialog from "@/components/admin/ConfirmDialog";
 import { btnGhost, btnPrimary, card, inputCls } from "@/components/admin/ui";
@@ -43,7 +43,7 @@ function StepTitle({ n, title, hint }: { n: number; title: string; hint?: string
   );
 }
 
-export default function SessionGenerator({ exams, emailEnabled }: { exams: ExamOption[]; emailEnabled: boolean }) {
+export default function SessionGenerator({ isSuper = false, exams, emailEnabled }: { isSuper?: boolean; exams: ExamOption[]; emailEnabled: boolean }) {
   const router = useRouter();
   const fileRef = useRef<HTMLInputElement>(null);
   const published = exams.filter((e) => e.status === "PUBLISHED");
@@ -55,6 +55,7 @@ export default function SessionGenerator({ exams, emailEnabled }: { exams: ExamO
   const [tray, setTray] = useState<{ email: string; name: string }[]>([]);
   const [dragging, setDragging] = useState(false);
   const [askSend, setAskSend] = useState(false);
+  const [askClear, setAskClear] = useState<"unstarted" | "all" | null>(null);
   const [askPublish, setAskPublish] = useState<string | null>(null);
   const [notice, setNotice] = useState<{ ok: boolean; text: string } | null>(null);
   const [copied, setCopied] = useState<string | null>(null);
@@ -396,6 +397,9 @@ export default function SessionGenerator({ exams, emailEnabled }: { exams: ExamO
             <button type="button" disabled={rows.length === 0} onClick={downloadCsv} className={btnGhost}>
               <Download className="h-4 w-4" aria-hidden="true" /> CSV
             </button>
+            <button type="button" disabled={rows.length === 0} onClick={() => setAskClear(rows.some((r) => r.status !== "NOT_STARTED") && isSuper ? "all" : "unstarted")} className={`${btnGhost} hover:!border-red-300 hover:!bg-red-50 hover:!text-red-700`}>
+              <Trash2 className="h-4 w-4" aria-hidden="true" /> Quitar a todos
+            </button>
           </div>
         </div>
 
@@ -502,6 +506,25 @@ export default function SessionGenerator({ exams, emailEnabled }: { exams: ExamO
       </section>
       <ConfirmDialog open={askSend} title={`¿Enviar ${pendingEmailIds.length} correo(s) de invitación?`} description="Cada aspirante pendiente recibirá su enlace personal. Los que ya recibieron correo no se incluyen." confirmLabel={`Enviar ${pendingEmailIds.length} correo(s)`} onCancel={() => setAskSend(false)} onConfirm={() => { setAskSend(false); void sendEmails(pendingEmailIds); }} />
       <ConfirmDialog open={!!askPublish} title="¿Publicar este examen?" description="Los aspirantes habilitados podrán presentarlo con su enlace. Tras iniciar, las preguntas quedan bloqueadas." confirmLabel="Publicar examen" onCancel={() => setAskPublish(null)} onConfirm={() => { const id = askPublish!; setAskPublish(null); publish(id); }} />
+      {askClear && (() => {
+        const started = rows.filter((r) => r.status !== "NOT_STARTED").length;
+        const notStarted = rows.length - started;
+        const all = askClear === "all";
+        return (
+          <ConfirmDialog open tone="danger" busy={pending}
+            title={all ? `¿Quitar a los ${rows.length} aspirantes y descartar ${started} intento(s)?` : `¿Quitar a ${notStarted} aspirante(s) que no han iniciado?`}
+            description={all
+              ? `Se eliminan los ${rows.length} accesos de este examen. De los ${started} que ya iniciaron se pierden respuestas, puntaje, infracciones y decisiones. No se puede deshacer; úsalo para limpiar pruebas. Queda en la bitácora.`
+              : `Sus enlaces dejan de funcionar. ${started > 0 ? `Los ${started} que ya iniciaron o entregaron NO se tocan${isSuper ? "" : " (solo un superadmin puede descartarlos)"}.` : ""}`}
+            confirmLabel={all ? "Quitar a todos y descartar intentos" : "Quitar aspirantes"} onCancel={() => setAskClear(null)}
+            onConfirm={() => startTransition(async () => {
+              const res = await clearExamSessions(examId, askClear);
+              setAskClear(null);
+              setNotice(res.ok ? { ok: true, text: `${res.removed} aspirante(s) quitado(s).` } : { ok: false, text: res.error });
+              await mutate();
+            })} />
+        );
+      })()}
     </div>
   );
 }

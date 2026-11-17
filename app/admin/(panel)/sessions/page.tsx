@@ -1,6 +1,7 @@
 import { Suspense } from "react";
 import type { Metadata } from "next";
 import { KeyRound } from "lucide-react";
+import { getAdmin } from "@/lib/require-admin";
 import { prisma } from "@/lib/prisma";
 import { emailConfigured } from "@/lib/email";
 import Gate from "@/components/admin/Gate";
@@ -18,8 +19,10 @@ async function SessionsContent() {
     orderBy: { createdAt: "desc" },
     select: { id: true, title: true, status: true, durationMinutes: true, convocatoria: { select: { name: true } }, _count: { select: { questions: true } } },
   });
+  const admin = await getAdmin();
   return (
     <SessionGenerator
+      isSuper={admin?.role === "SUPERADMIN"}
       emailEnabled={emailConfigured()}
       exams={exams.map((e) => ({
         id: e.id,

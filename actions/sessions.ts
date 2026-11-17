@@ -219,6 +219,27 @@ export async function removeSession(sessionId: string): Promise<Res> {
 }
 
 /**
+ * Quita en bloque a los aspirantes de un examen. «unstarted» solo quita a quienes aún no iniciaron (seguro, para
+ * cualquier rol con acceso a enlaces); «all» descarta TODOS los intentos, incluidos los iniciados, y es solo del superadmin.
+ */
+export async function clearExamSessions(examId: string, mode: "unstarted" | "all"): Promise<Res & { removed?: number }> {
+  if (!(await hasPermission("sessions:manage"))) return { ok: false, error: UNAUTHORIZED };
+  if (mode === "all" && !(await hasPermission("users:manage"))) return { ok: false, error: "Solo un superadmin puede descartar también los intentos ya iniciados." };
+  try {
+    const exam = await prisma.exam.findUnique({ where: { id: examId }, select: { title: true } });
+    if (!exam) return { ok: false, error: "El examen no existe." };
+    const res = await prisma.candidateSession.deleteMany({ where: { examId, ...(mode === "unstarted" ? { status: "NOT_STARTED" } : {}) } });
+    if (res.count === 0) return { ok: false, error: "No hay aspirantes que quitar." };
+    await logAction({ action: "session.remove_bulk", entityType: "exam", entityId: examId, summary: `Quitó a ${res.count} aspirante(s) de «${exam.title}»${mode === "all" ? " descartando también los intentos ya iniciados" : " (solo quienes no habían iniciado)"}` });
+    refreshSessions();
+    return { ok: true, removed: res.count };
+  } catch (e) {
+    console.error(e);
+    return { ok: false, error: "No se pudo quitar a los aspirantes." };
+  }
+}
+
+/**
  * Reinicia el intento (p. ej. por una falla técnica): descarta respuestas y puntaje, vuelve a «Sin iniciar» y conserva
  * la bitácora anterior más un registro de quién lo reinició. El enlace sigue siendo el mismo.
  */
