@@ -98,31 +98,16 @@ export default function EvaluationPanel({ sessionId, ctx, canVote, canDecide }: 
         </section>
       )}
 
-      <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm" aria-label="Evaluaciones de la Junta">
-        <div className="flex items-center justify-between gap-2">
-          <h2 className="flex items-center gap-2 font-semibold"><Users className="h-4 w-4 text-asigbo-blue" aria-hidden="true" /> La Junta</h2>
-          <span className="text-xs text-slate-500">{ctx.tally.total} de {ctx.voters} han votado</span>
-        </div>
-        <div className="mt-3 flex flex-wrap gap-2">
-          {VOTES.map((v) => <span key={v.key} className={`rounded-full px-2.5 py-1 text-xs font-semibold ${v.chip}`}>{v.label}: {ctx.tally[v.key]}</span>)}
-        </div>
-        {others.length === 0 ? (
-          <p className="mt-3 text-sm text-slate-500">Todavía nadie más ha dejado su evaluación.</p>
-        ) : (
-          <ul className="mt-3 space-y-3">
-            {others.map((e) => (
-              <li key={e.adminId} className="rounded-xl border border-slate-200 p-3 text-sm">
-                <div className="flex flex-wrap items-center justify-between gap-2">
-                  <span className="font-medium">{e.adminName}</span>
-                  <span className={`rounded-full px-2 py-0.5 text-xs font-semibold ${VOTES.find((v) => v.key === e.vote)?.chip ?? "bg-slate-100 text-slate-600"}`}>{voteLabel(e.vote)}</span>
-                </div>
-                {e.comment.trim() && <p className="mt-1.5 flex gap-1.5 whitespace-pre-wrap text-slate-700"><MessageSquare className="mt-0.5 h-3.5 w-3.5 shrink-0 text-slate-400" aria-hidden="true" />{e.comment}</p>}
-                <p className="mt-1 text-xs text-slate-400">{fmtDateTime(e.updatedAt)}</p>
-              </li>
-            ))}
-          </ul>
+      <nav className="grid grid-cols-2 gap-2" aria-label="Navegar entre candidatos">
+        <button type="button" onClick={() => go(ctx.prevId)} disabled={!ctx.prevId || pending} className="inline-flex min-h-10 cursor-pointer items-center justify-center gap-1 rounded-xl border border-slate-300 bg-white px-3 text-sm font-medium text-slate-700 hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-40"><ChevronLeft className="h-4 w-4" aria-hidden="true" /> Anterior</button>
+        <button type="button" onClick={() => go(ctx.nextId)} disabled={!ctx.nextId || pending} className="inline-flex min-h-10 cursor-pointer items-center justify-center gap-1 rounded-xl border border-slate-300 bg-white px-3 text-sm font-medium text-slate-700 hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-40">Siguiente <ChevronRight className="h-4 w-4" aria-hidden="true" /></button>
+        {canVote && (
+          <button type="button" onClick={() => go(ctx.nextPendingId)} disabled={!ctx.nextPendingId || pending} className="col-span-2 inline-flex min-h-11 cursor-pointer items-center justify-center gap-2 rounded-xl bg-asigbo-blue px-3 text-sm font-semibold text-white hover:bg-asigbo-blue-dark disabled:cursor-not-allowed disabled:opacity-50">
+            <FastForward className="h-4 w-4" aria-hidden="true" /> {ctx.nextPendingId ? "Siguiente sin mi voto" : "Ya votaste a todos"}
+          </button>
         )}
-      </section>
+        <Link href={`/admin/evaluation?e=${ctx.examId}`} className="col-span-2 text-center text-sm font-medium text-asigbo-blue hover:underline">Volver a la lista</Link>
+      </nav>
 
       <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm" aria-label="Decisión final">
         <h2 className="font-semibold">Decisión final</h2>
@@ -151,16 +136,31 @@ export default function EvaluationPanel({ sessionId, ctx, canVote, canDecide }: 
         )}
       </section>
 
-      <nav className="grid grid-cols-2 gap-2" aria-label="Navegar entre candidatos">
-        <button type="button" onClick={() => go(ctx.prevId)} disabled={!ctx.prevId || pending} className="inline-flex min-h-10 cursor-pointer items-center justify-center gap-1 rounded-xl border border-slate-300 bg-white px-3 text-sm font-medium text-slate-700 hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-40"><ChevronLeft className="h-4 w-4" aria-hidden="true" /> Anterior</button>
-        <button type="button" onClick={() => go(ctx.nextId)} disabled={!ctx.nextId || pending} className="inline-flex min-h-10 cursor-pointer items-center justify-center gap-1 rounded-xl border border-slate-300 bg-white px-3 text-sm font-medium text-slate-700 hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-40">Siguiente <ChevronRight className="h-4 w-4" aria-hidden="true" /></button>
-        {canVote && (
-          <button type="button" onClick={() => go(ctx.nextPendingId)} disabled={!ctx.nextPendingId || pending} className="col-span-2 inline-flex min-h-11 cursor-pointer items-center justify-center gap-2 rounded-xl bg-asigbo-blue px-3 text-sm font-semibold text-white hover:bg-asigbo-blue-dark disabled:cursor-not-allowed disabled:opacity-50">
-            <FastForward className="h-4 w-4" aria-hidden="true" /> {ctx.nextPendingId ? "Siguiente sin mi voto" : "Ya votaste a todos"}
-          </button>
+      <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm" aria-label="Evaluaciones de la Junta">
+        <div className="flex items-center justify-between gap-2">
+          <h2 className="flex items-center gap-2 font-semibold"><Users className="h-4 w-4 text-asigbo-blue" aria-hidden="true" /> La Junta</h2>
+          <span className="text-xs text-slate-500">{ctx.tally.total} de {ctx.voters} han votado</span>
+        </div>
+        <div className="mt-3 flex flex-wrap gap-2">
+          {VOTES.map((v) => <span key={v.key} className={`rounded-full px-2.5 py-1 text-xs font-semibold ${v.chip}`}>{v.label}: {ctx.tally[v.key]}</span>)}
+        </div>
+        {others.length === 0 ? (
+          <p className="mt-3 text-sm text-slate-500">Todavía nadie más ha dejado su evaluación.</p>
+        ) : (
+          <ul className="mt-3 space-y-3">
+            {others.map((e) => (
+              <li key={e.adminId} className="rounded-xl border border-slate-200 p-3 text-sm">
+                <div className="flex flex-wrap items-center justify-between gap-2">
+                  <span className="font-medium">{e.adminName}</span>
+                  <span className={`rounded-full px-2 py-0.5 text-xs font-semibold ${VOTES.find((v) => v.key === e.vote)?.chip ?? "bg-slate-100 text-slate-600"}`}>{voteLabel(e.vote)}</span>
+                </div>
+                {e.comment.trim() && <p className="mt-1.5 flex gap-1.5 whitespace-pre-wrap text-slate-700"><MessageSquare className="mt-0.5 h-3.5 w-3.5 shrink-0 text-slate-400" aria-hidden="true" />{e.comment}</p>}
+                <p className="mt-1 text-xs text-slate-400">{fmtDateTime(e.updatedAt)}</p>
+              </li>
+            ))}
+          </ul>
         )}
-        <Link href={`/admin/evaluation?e=${ctx.examId}`} className="col-span-2 text-center text-sm font-medium text-asigbo-blue hover:underline">Volver a la lista</Link>
-      </nav>
+      </section>
 
       {askFinal && (
         <ConfirmDialog open busy={pending} onCancel={() => setAskFinal(null)} onConfirm={doFinal} confirmLabel="Registrar decisión final"

@@ -84,7 +84,7 @@ async function Review({ params }: { params: Promise<{ sessionId: string }> }) {
           </details>
         </div>
 
-        <aside className="lg:sticky lg:top-4 lg:self-start">
+        <aside className="lg:sticky lg:top-4 lg:max-h-[calc(100vh-2rem)] lg:self-start lg:overflow-y-auto lg:pr-1">
           {evaluable ? (
             <EvaluationPanel key={d.id} sessionId={d.id} ctx={ctx} canVote={can(admin.role, "evaluation:write")} canDecide={can(admin.role, "ranking:decide")} />
           ) : (
